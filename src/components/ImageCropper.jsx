@@ -25,17 +25,18 @@ function ImageCropper({ imageUrl, onCropComplete, onCancel }) {
         size: initialSize
       });
 
-      // スケールを計算（画面全体に表示）
-      if (canvasRef.current) {
-        const container = canvasRef.current.parentElement;
-        const containerWidth = container.clientWidth;
-        const containerHeight = container.clientHeight;
-        const computedScale = Math.min(
-          containerWidth / img.width,
-          containerHeight / img.height
-        );
-        setScale(computedScale);
-      }
+      // スケールを計算（画面全体に表示、ボタンエリアを除く）
+      const buttonAreaHeight = 100; // 下部ボタンエリアの高さ
+      const topPadding = 80; // 上部の説明エリア
+      const availableWidth = window.innerWidth - 20; // 左右マージン
+      const availableHeight = window.innerHeight - buttonAreaHeight - topPadding;
+
+      const computedScale = Math.min(
+        availableWidth / img.width,
+        availableHeight / img.height,
+        1 // 元の画像サイズを超えないように
+      );
+      setScale(computedScale);
     };
     img.src = imageUrl;
   }, [imageUrl]);
@@ -43,13 +44,16 @@ function ImageCropper({ imageUrl, onCropComplete, onCancel }) {
   // ウィンドウリサイズ時のスケール調整
   useEffect(() => {
     const handleResize = () => {
-      if (image && canvasRef.current) {
-        const container = canvasRef.current.parentElement;
-        const containerWidth = container.clientWidth;
-        const containerHeight = container.clientHeight;
+      if (image) {
+        const buttonAreaHeight = 100;
+        const topPadding = 80;
+        const availableWidth = window.innerWidth - 20;
+        const availableHeight = window.innerHeight - buttonAreaHeight - topPadding;
+
         const computedScale = Math.min(
-          containerWidth / image.width,
-          containerHeight / image.height
+          availableWidth / image.width,
+          availableHeight / image.height,
+          1
         );
         setScale(computedScale);
       }
