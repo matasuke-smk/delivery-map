@@ -9,6 +9,8 @@ function Map({ onOpenSettings }) {
   const mapContainer = useRef(null);
   const map = useRef(null);
   const [isOverviewMode, setIsOverviewMode] = React.useState(false);
+  const [showRecenterButton, setShowRecenterButton] = React.useState(false);
+  const userInteracted = useRef(false);
   const {
     stores,
     currentLocation,
@@ -52,6 +54,14 @@ function Map({ onOpenSettings }) {
       });
 
       map.current.addControl(geolocate);
+
+      // ユーザーのドラッグ操作を検出
+      map.current.on('dragstart', () => {
+        const storeState = useDeliveryStore.getState();
+        if (storeState.isNavigating) {
+          userInteracted.current = true;
+        }
+      });
 
       // GPS位置取得時にストアを更新
       geolocate.on('geolocate', (e) => {
@@ -340,6 +350,8 @@ function Map({ onOpenSettings }) {
       startNavigation();
       lastSpokenStep.current = -1;
       setIsOverviewMode(false);
+      userInteracted.current = false;
+      setShowRecenterButton(false);
 
       // 最初の案内を音声で
       const firstStep = currentRoute.legs[0].steps[0];
@@ -373,6 +385,32 @@ function Map({ onOpenSettings }) {
         });
       }
     }
+  };
+
+  const handleRecenter = () => {
+    if (!currentRoute || !currentLocation) return;
+
+    const steps = currentRoute.legs[0].steps;
+    const currentStep = steps[currentStepIndex];
+    const nextPoint = {
+      lat: currentStep.maneuver.location[1],
+      lng: currentStep.maneuver.location[0]
+    };
+    const bearing = calculateBearing(currentLocation, nextPoint);
+    const mapHeight = map.current.getContainer().offsetHeight;
+    const topPadding = mapHeight * 0.6;
+
+    map.current.flyTo({
+      center: [currentLocation.lng, currentLocation.lat],
+      zoom: 17,
+      pitch: 60,
+      bearing: bearing,
+      padding: { top: topPadding, bottom: 0, left: 0, right: 0 },
+      duration: 1000
+    });
+
+    userInteracted.current = false;
+    setShowRecenterButton(false);
   };
 
   const toggleOverviewMode = () => {
@@ -428,6 +466,8 @@ function Map({ onOpenSettings }) {
 
     stopNavigation();
     lastSpokenStep.current = -1;
+    userInteracted.current = false;
+    setShowRecenterButton(false);
 
     // カメラをリセット
     if (map.current && routeMarker.current) {
@@ -519,7 +559,8 @@ function Map({ onOpenSettings }) {
 
     // カメラを現在位置追従、進行方向を上に（Google Mapsスタイル）
     // 全体表示モードでは追従しない
-    if (map.current && !isOverviewMode) {
+    // ユーザーが手動でスワイプした場合は追従しない
+    if (map.current && !isOverviewMode && !userInteracted.current) {
       const bearing = calculateBearing(currentLocation, nextPoint);
       const mapHeight = map.current.getContainer().offsetHeight;
       const topPadding = mapHeight * 0.6; // 上部60%をパディング
@@ -536,6 +577,38 @@ function Map({ onOpenSettings }) {
     }
   }, [currentLocation, isNavigating, currentStepIndex, isOverviewMode, stopNavigation]);
 
+  // カメラ位置チェック（ナビ中、ユーザー操作後）
+  useEffect(() => {
+    if (!map.current || !isNavigating || !userInteracted.current || !currentLocation) {
+      return;
+    }
+
+    const checkCameraPosition = () => {
+      if (!map.current || !currentLocation) return;
+
+      const center = map.current.getCenter();
+      const distance = calculateDistance(
+        currentLocation,
+        { lat: center.lat, lng: center.lng }
+      );
+
+      // 100m以上離れたらボタン表示
+      if (distance > 100) {
+        setShowRecenterButton(true);
+      } else {
+        setShowRecenterButton(false);
+      }
+    };
+
+    map.current.on('moveend', checkCameraPosition);
+
+    return () => {
+      if (map.current) {
+        map.current.off('moveend', checkCameraPosition);
+      }
+    };
+  }, [isNavigating, currentLocation]);
+
   return (
     <div className="w-full h-full relative">
       <div ref={mapContainer} className="w-full h-full" />
@@ -550,6 +623,19 @@ function Map({ onOpenSettings }) {
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
         </svg>
       </button>
+
+      {/* 現在位置に戻るボタン（ナビ中、スワイプ後のみ表示） */}
+      {isNavigating && showRecenterButton && (
+        <button
+          onClick={handleRecenter}
+          className="absolute bottom-24 right-4 p-4 rounded-full bg-blue-500 text-white shadow-lg hover:bg-blue-600 transition-all z-10 animate-bounce"
+        >
+          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+          </svg>
+        </button>
+      )}
 
       {/* ナビゲーション中のUI（画面下） */}
       {isNavigating && currentRoute && currentLocation && (
