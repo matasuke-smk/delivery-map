@@ -5,7 +5,7 @@ import useDeliveryStore from '../stores/deliveryStore';
 // Mapboxトークン設定
 mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN || '';
 
-function Map({ onOpenSettings }) {
+function Map({ onOpenSettings, onGeolocateReady }) {
   const mapContainer = useRef(null);
   const map = useRef(null);
   const [isOverviewMode, setIsOverviewMode] = React.useState(false);
@@ -77,6 +77,11 @@ function Map({ onOpenSettings }) {
         console.error('🔴 GPS取得エラー:', e);
       });
 
+      // geolocateコントロールを親コンポーネントに渡す
+      if (onGeolocateReady) {
+        onGeolocateReady(geolocate);
+      }
+
       // ユーザーのドラッグ操作を検出
       map.current.on('dragstart', () => {
         const storeState = useDeliveryStore.getState();
@@ -142,9 +147,6 @@ function Map({ onOpenSettings }) {
             ]
           }
         });
-
-        // 位置情報取得を開始
-        geolocate.trigger();
       });
 
       // 地図クリックでルート検索

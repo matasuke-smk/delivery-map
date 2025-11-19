@@ -7,6 +7,7 @@ function App() {
   const { loadData, showTraffic, toggleTraffic, useTollRoads, toggleTollRoads, mapPitch, setMapPitch, voiceVolume, setVoiceVolume, currentLocationIcon, setCurrentLocationIcon } = useDeliveryStore();
   const [isLoading, setIsLoading] = useState(true);
   const [showSettings, setShowSettings] = useState(false);
+  const [geolocateControl, setGeolocateControl] = useState(null);
 
   useEffect(() => {
     initApp();
@@ -42,7 +43,10 @@ function App() {
     <div className="flex flex-col bg-gray-100" style={{ height: '100vh', height: '100dvh' }}>
       {/* メインコンテンツ */}
       <main className="flex-1 relative overflow-hidden" style={{ minHeight: 0 }}>
-        <Map onOpenSettings={() => setShowSettings(true)} />
+        <Map
+          onOpenSettings={() => setShowSettings(true)}
+          onGeolocateReady={(geolocate) => setGeolocateControl(geolocate)}
+        />
       </main>
 
       {/* 設定モーダル */}
@@ -62,6 +66,24 @@ function App() {
             </div>
 
             <div className="space-y-4">
+              {/* 現在位置取得 */}
+              <div className="p-4 bg-gray-50 rounded-lg">
+                <button
+                  onClick={() => {
+                    if (geolocateControl) {
+                      geolocateControl.trigger();
+                    }
+                  }}
+                  className="w-full py-3 bg-blue-500 text-white rounded-lg font-semibold hover:bg-blue-600 transition-colors flex items-center justify-center gap-2"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                  </svg>
+                  現在位置を取得
+                </button>
+              </div>
+
               {/* 交通状況 */}
               <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
                 <div>
