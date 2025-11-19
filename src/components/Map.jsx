@@ -182,7 +182,6 @@ function Map({ onOpenSettings, onGeolocateReady }) {
 
         // アイコンを登録
         map.current.addImage('traffic-signal-icon', createIcon('信', '#FF9800'), { pixelRatio: 1 });
-        map.current.addImage('stop-sign-icon', createIcon('止', '#F44336'), { pixelRatio: 1 });
         map.current.addImage('crossing-icon', createIcon('踏', '#2196F3'), { pixelRatio: 1 });
 
         // 交通標識データ用のソースを追加
@@ -202,22 +201,10 @@ function Map({ onOpenSettings, onGeolocateReady }) {
           filter: ['==', ['get', 'type'], 'traffic_signals'],
           layout: {
             'icon-image': 'traffic-signal-icon',
-            'icon-size': 0.7,
+            'icon-size': 0.6,
             'icon-allow-overlap': true
-          }
-        });
-
-        // 一時停止レイヤー
-        map.current.addLayer({
-          id: 'stop-signs',
-          type: 'symbol',
-          source: 'traffic-signs',
-          filter: ['==', ['get', 'type'], 'stop'],
-          layout: {
-            'icon-image': 'stop-sign-icon',
-            'icon-size': 0.7,
-            'icon-allow-overlap': true
-          }
+          },
+          minzoom: 14 // ズームレベル14以上で表示
         });
 
         // 踏切レイヤー
@@ -228,19 +215,32 @@ function Map({ onOpenSettings, onGeolocateReady }) {
           filter: ['==', ['get', 'type'], 'level_crossing'],
           layout: {
             'icon-image': 'crossing-icon',
-            'icon-size': 0.7,
+            'icon-size': 0.6,
             'icon-allow-overlap': true
-          }
+          },
+          minzoom: 14 // ズームレベル14以上で表示
         });
 
         // Overpass APIから交通標識データを取得
         const fetchTrafficSigns = async () => {
           if (!map.current) return;
 
+          // ズームレベルが14未満の場合は取得しない
+          const zoom = map.current.getZoom();
+          if (zoom < 14) {
+            console.log('🚦 ズームレベルが低いため交通標識を非表示');
+            const source = map.current.getSource('traffic-signs');
+            if (source) {
+              source.setData({ type: 'FeatureCollection', features: [] });
+            }
+            return;
+          }
+
           const bounds = map.current.getBounds();
           const bbox = `${bounds.getSouth()},${bounds.getWest()},${bounds.getNorth()},${bounds.getEast()}`;
 
-          const query = `[out:json][bbox:${bbox}];(node["highway"="traffic_signals"];node["highway"="stop"];node["railway"="level_crossing"];);out body;`;
+          // 一時停止は除外（日本ではデータが少ないため）
+          const query = `[out:json][bbox:${bbox}][timeout:10];(node["highway"="traffic_signals"];node["railway"="level_crossing"];);out body 500;`;
 
           try {
             console.log('🚦 交通標識データ取得開始');
@@ -266,8 +266,7 @@ function Map({ onOpenSettings, onGeolocateReady }) {
                 coordinates: [element.lon, element.lat]
               },
               properties: {
-                type: element.tags.highway === 'traffic_signals' ? 'traffic_signals' :
-                      element.tags.highway === 'stop' ? 'stop' : 'level_crossing'
+                type: element.tags.highway === 'traffic_signals' ? 'traffic_signals' : 'level_crossing'
               }
             }));
 
