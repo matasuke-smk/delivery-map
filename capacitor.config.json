@@ -1,0 +1,13 @@
+{
+  "appId": "com.takahiro.deliverymap",
+  "appName": "配達マップ",
+  "webDir": "dist",
+  "server": {
+    "androidScheme": "https"
+  },
+  "plugins": {
+    "Geolocation": {
+      "requestAlwaysAuthorization": true
+    }
+  }
+}
