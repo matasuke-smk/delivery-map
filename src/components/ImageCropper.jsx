@@ -71,13 +71,63 @@ function ImageCropper({ imageUrl, onCropComplete, onCancel }) {
 
   const handleMouseDown = (e) => {
     if (!canvasRef.current || !image) return;
+    e.preventDefault();
 
     const canvas = canvasRef.current;
     const rect = canvas.getBoundingClientRect();
     const x = (e.clientX - rect.left) / scale;
     const y = (e.clientY - rect.top) / scale;
 
+    console.log('マウスダウン:', { x, y, cropArea, scale });
+
     // クリックが切り抜き領域内かチェック
+    if (
+      x >= cropArea.x &&
+      x <= cropArea.x + cropArea.size &&
+      y >= cropArea.y &&
+      y <= cropArea.y + cropArea.size
+    ) {
+      console.log('ドラッグ開始');
+      setIsDragging(true);
+      setDragStart({ x: x - cropArea.x, y: y - cropArea.y });
+    }
+  };
+
+  const handleMouseMove = (e) => {
+    if (!isDragging || !canvasRef.current || !image) return;
+    e.preventDefault();
+
+    const canvas = canvasRef.current;
+    const rect = canvas.getBoundingClientRect();
+    const x = (e.clientX - rect.left) / scale;
+    const y = (e.clientY - rect.top) / scale;
+
+    const newX = Math.max(0, Math.min(x - dragStart.x, image.width - cropArea.size));
+    const newY = Math.max(0, Math.min(y - dragStart.y, image.height - cropArea.size));
+
+    console.log('移動中:', { newX, newY });
+
+    setCropArea(prev => ({ ...prev, x: newX, y: newY }));
+  };
+
+  const handleMouseUp = (e) => {
+    if (isDragging) {
+      console.log('ドラッグ終了');
+    }
+    setIsDragging(false);
+  };
+
+  // タッチイベント対応
+  const handleTouchStart = (e) => {
+    if (!canvasRef.current || !image || e.touches.length === 0) return;
+    e.preventDefault();
+
+    const canvas = canvasRef.current;
+    const rect = canvas.getBoundingClientRect();
+    const touch = e.touches[0];
+    const x = (touch.clientX - rect.left) / scale;
+    const y = (touch.clientY - rect.top) / scale;
+
     if (
       x >= cropArea.x &&
       x <= cropArea.x + cropArea.size &&
@@ -89,21 +139,23 @@ function ImageCropper({ imageUrl, onCropComplete, onCancel }) {
     }
   };
 
-  const handleMouseMove = (e) => {
-    if (!isDragging || !canvasRef.current || !image) return;
+  const handleTouchMove = (e) => {
+    if (!isDragging || !canvasRef.current || !image || e.touches.length === 0) return;
+    e.preventDefault();
 
     const canvas = canvasRef.current;
     const rect = canvas.getBoundingClientRect();
-    const x = (e.clientX - rect.left) / scale;
-    const y = (e.clientY - rect.top) / scale;
+    const touch = e.touches[0];
+    const x = (touch.clientX - rect.left) / scale;
+    const y = (touch.clientY - rect.top) / scale;
 
     const newX = Math.max(0, Math.min(x - dragStart.x, image.width - cropArea.size));
     const newY = Math.max(0, Math.min(y - dragStart.y, image.height - cropArea.size));
 
-    setCropArea({ ...cropArea, x: newX, y: newY });
+    setCropArea(prev => ({ ...prev, x: newX, y: newY }));
   };
 
-  const handleMouseUp = () => {
+  const handleTouchEnd = () => {
     setIsDragging(false);
   };
 
@@ -146,7 +198,10 @@ function ImageCropper({ imageUrl, onCropComplete, onCancel }) {
             onMouseMove={handleMouseMove}
             onMouseUp={handleMouseUp}
             onMouseLeave={handleMouseUp}
-            className="border border-gray-300 cursor-move"
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={handleTouchEnd}
+            className="border border-gray-300 cursor-move touch-none"
           />
         </div>
 
