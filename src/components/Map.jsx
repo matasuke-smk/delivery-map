@@ -25,6 +25,7 @@ function Map() {
     setCurrentLocation
   } = useDeliveryStore();
   const routeMarker = useRef(null);
+  const lastSpokenStep = useRef(-1);
 
   useEffect(() => {
     if (map.current) return;
@@ -299,23 +300,73 @@ function Map() {
     return R * c;
   };
 
+  // 2点間の方位角を計算（度数法、北が0度）
+  const calculateBearing = (point1, point2) => {
+    const φ1 = point1.lat * Math.PI / 180;
+    const φ2 = point2.lat * Math.PI / 180;
+    const Δλ = (point2.lng - point1.lng) * Math.PI / 180;
+
+    const y = Math.sin(Δλ) * Math.cos(φ2);
+    const x = Math.cos(φ1) * Math.sin(φ2) -
+              Math.sin(φ1) * Math.cos(φ2) * Math.cos(Δλ);
+    const θ = Math.atan2(y, x);
+
+    return (θ * 180 / Math.PI + 360) % 360;
+  };
+
+  // 音声案内
+  const speak = (text) => {
+    if ('speechSynthesis' in window) {
+      // 既存の音声を停止
+      window.speechSynthesis.cancel();
+
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.lang = 'ja-JP';
+      utterance.rate = 1.0;
+      utterance.pitch = 1.0;
+      utterance.volume = 1.0;
+
+      window.speechSynthesis.speak(utterance);
+    }
+  };
+
   const handleStartNavigation = () => {
     if (currentRoute && destination) {
       startNavigation();
-      // カメラを現在位置中心に
+      lastSpokenStep.current = -1;
+
+      // 最初の案内を音声で
+      const firstStep = currentRoute.legs[0].steps[0];
+      speak(`ナビゲーションを開始します。${firstStep.maneuver.instruction}`);
+
+      // カメラを現在位置中心に、進行方向を上に
       if (map.current && currentLocation) {
+        const nextPoint = {
+          lat: firstStep.maneuver.location[1],
+          lng: firstStep.maneuver.location[0]
+        };
+        const bearing = calculateBearing(currentLocation, nextPoint);
+
         map.current.flyTo({
           center: [currentLocation.lng, currentLocation.lat],
-          zoom: 16,
+          zoom: 17,
           pitch: 60,
-          bearing: 0
+          bearing: bearing,
+          duration: 2000
         });
       }
     }
   };
 
   const handleStopNavigation = () => {
+    // 音声停止
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+    }
+
     stopNavigation();
+    lastSpokenStep.current = -1;
+
     // カメラをリセット
     if (map.current && routeMarker.current) {
       routeMarker.current.remove();
@@ -324,6 +375,15 @@ function Map() {
     if (map.current && map.current.getSource('route')) {
       map.current.removeLayer('route');
       map.current.removeSource('route');
+    }
+
+    // カメラを通常視点に
+    if (map.current) {
+      map.current.easeTo({
+        pitch: 0,
+        bearing: 0,
+        duration: 1000
+      });
     }
   };
 
@@ -334,8 +394,10 @@ function Map() {
     const steps = currentRoute.legs[0].steps;
     if (currentStepIndex >= steps.length) {
       // 到着
-      alert('目的地に到着しました！');
-      stopNavigation();
+      speak('目的地に到着しました');
+      setTimeout(() => {
+        handleStopNavigation();
+      }, 2000);
       return;
     }
 
@@ -349,14 +411,36 @@ function Map() {
 
     // 次のステップまで30m以内なら次へ
     if (distance < 30 && currentStepIndex < steps.length - 1) {
-      setCurrentStepIndex(currentStepIndex + 1);
+      const newStepIndex = currentStepIndex + 1;
+      setCurrentStepIndex(newStepIndex);
+
+      // 新しいステップの音声案内
+      if (lastSpokenStep.current !== newStepIndex) {
+        const nextStep = steps[newStepIndex];
+        const distanceText = nextStep.distance < 1000
+          ? `${Math.round(nextStep.distance)}メートル先`
+          : `${(nextStep.distance / 1000).toFixed(1)}キロ先`;
+
+        speak(`${distanceText}、${nextStep.maneuver.instruction}`);
+        lastSpokenStep.current = newStepIndex;
+      }
     }
 
-    // カメラを現在位置追従
+    // 100m以内なら音声で距離を案内
+    if (distance < 100 && distance > 30 && lastSpokenStep.current !== currentStepIndex) {
+      speak(`${Math.round(distance)}メートル先、${currentStep.maneuver.instruction}`);
+      lastSpokenStep.current = currentStepIndex;
+    }
+
+    // カメラを現在位置追従、進行方向を上に（Google Mapsスタイル）
     if (map.current) {
+      const bearing = calculateBearing(currentLocation, nextPoint);
+
       map.current.easeTo({
         center: [currentLocation.lng, currentLocation.lat],
-        duration: 1000
+        bearing: bearing,
+        duration: 1000,
+        easing: (t) => t // リニア補間でスムーズに
       });
     }
   }, [currentLocation, isNavigating, currentStepIndex]);
