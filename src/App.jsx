@@ -181,40 +181,48 @@ function App() {
                   <div className="font-semibold text-gray-900">現在位置アイコン</div>
                   <div className="text-sm text-gray-500">地図上の現在位置マーカーの画像を変更</div>
                 </div>
-                <div className="flex items-center gap-3">
+                <div className="space-y-3">
                   {currentLocationIcon && (
-                    <div className="w-12 h-12 rounded-full border-2 border-white shadow-md" style={{
-                      backgroundImage: `url(${currentLocationIcon})`,
-                      backgroundSize: 'cover',
-                      backgroundPosition: 'center'
-                    }} />
+                    <div className="flex items-center justify-between p-3 bg-white rounded-lg border border-gray-200">
+                      <div className="flex items-center gap-3">
+                        <div className="w-12 h-12 rounded-full border-2 border-gray-300 shadow-md" style={{
+                          backgroundImage: `url(${currentLocationIcon})`,
+                          backgroundSize: 'cover',
+                          backgroundPosition: 'center'
+                        }} />
+                        <span className="text-sm text-gray-600">カスタムアイコン設定済み</span>
+                      </div>
+                      <button
+                        onClick={() => setCurrentLocationIcon(null)}
+                        className="px-3 py-1.5 bg-red-500 text-white text-sm rounded-lg hover:bg-red-600 transition-colors"
+                      >
+                        削除
+                      </button>
+                    </div>
                   )}
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={(e) => {
-                      const file = e.target.files[0];
-                      if (file) {
-                        const reader = new FileReader();
-                        reader.onloadend = () => {
-                          setTempImageUrl(reader.result);
-                          setShowImageCropper(true);
-                        };
-                        reader.readAsDataURL(file);
-                      }
-                      // ファイル選択をリセット（同じファイルを再選択可能にする）
-                      e.target.value = '';
-                    }}
-                    className="flex-1 text-sm text-gray-700"
-                  />
-                  {currentLocationIcon && (
-                    <button
-                      onClick={() => setCurrentLocationIcon(null)}
-                      className="px-3 py-1 bg-red-500 text-white text-sm rounded hover:bg-red-600"
-                    >
-                      リセット
-                    </button>
-                  )}
+                  <label className="block">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => {
+                        const file = e.target.files[0];
+                        if (file) {
+                          const reader = new FileReader();
+                          reader.onloadend = () => {
+                            setTempImageUrl(reader.result);
+                            setShowImageCropper(true);
+                          };
+                          reader.readAsDataURL(file);
+                        }
+                        // ファイル選択をリセット（同じファイルを再選択可能にする）
+                        e.target.value = '';
+                      }}
+                      className="hidden"
+                    />
+                    <div className="w-full px-4 py-3 bg-blue-500 text-white text-center rounded-lg hover:bg-blue-600 transition-colors cursor-pointer font-medium">
+                      {currentLocationIcon ? '画像を変更' : '画像を選択'}
+                    </div>
+                  </label>
                 </div>
               </div>
             </div>

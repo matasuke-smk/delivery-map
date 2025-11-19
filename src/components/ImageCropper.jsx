@@ -204,68 +204,121 @@ function ImageCropper({ imageUrl, onCropComplete, onCancel }) {
 
   if (!image) {
     return (
-      <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-[60] p-4">
-        <div className="bg-white rounded-lg p-6">
-          <p className="text-gray-700">画像を読み込み中...</p>
+      <div className="fixed inset-0 bg-gradient-to-br from-blue-600 to-purple-600 bg-opacity-95 flex items-center justify-center z-[60] backdrop-blur-sm">
+        <div className="bg-white rounded-2xl p-8 shadow-2xl">
+          <div className="flex items-center gap-3">
+            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+            <p className="text-gray-700 font-medium">画像を読み込み中...</p>
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-[60] p-4">
-      <div className="bg-white rounded-lg p-6 max-w-md w-full max-h-[90vh] flex flex-col">
-        <h3 className="text-lg font-bold mb-2">画像を切り抜く</h3>
-        <p className="text-sm text-gray-600 mb-4">青い枠をドラッグして切り抜く範囲を選択してください</p>
-
-        <div className="mb-4 flex justify-center overflow-auto">
-          <canvas
-            ref={canvasRef}
-            onMouseDown={handleMouseDown}
-            onMouseMove={handleMouseMove}
-            onMouseUp={handleMouseUp}
-            onMouseLeave={handleMouseUp}
-            onTouchStart={handleTouchStart}
-            onTouchMove={handleTouchMove}
-            onTouchEnd={handleTouchEnd}
-            className="border border-gray-300 cursor-move touch-none"
-          />
+    <div className="fixed inset-0 bg-gradient-to-br from-blue-600 to-purple-600 bg-opacity-95 flex items-center justify-center z-[60] p-4 backdrop-blur-sm">
+      <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full max-h-[90vh] flex flex-col overflow-hidden">
+        {/* ヘッダー */}
+        <div className="bg-gradient-to-r from-blue-500 to-purple-500 p-6 text-white">
+          <h3 className="text-xl font-bold mb-2">✨ アイコンを作成</h3>
+          <p className="text-sm text-blue-100">青い枠をドラッグして切り抜く範囲を調整</p>
         </div>
 
-        {/* サイズ調整スライダー */}
-        <div className="mb-4">
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            切り抜きサイズ: {Math.round(cropSize)}px
-          </label>
-          <input
-            type="range"
-            min="50"
-            max={image ? Math.min(image.width, image.height) : 500}
-            value={cropSize}
-            onChange={handleSizeChange}
-            className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-500"
-          />
-          <div className="flex justify-between text-xs text-gray-500 mt-1">
-            <span>小</span>
-            <span>大</span>
+        {/* コンテンツエリア */}
+        <div className="p-6 flex-1 overflow-auto">
+          {/* プレビューエリア */}
+          <div className="mb-6 flex justify-center">
+            <div className="relative">
+              <canvas
+                ref={canvasRef}
+                onMouseDown={handleMouseDown}
+                onMouseMove={handleMouseMove}
+                onMouseUp={handleMouseUp}
+                onMouseLeave={handleMouseUp}
+                onTouchStart={handleTouchStart}
+                onTouchMove={handleTouchMove}
+                onTouchEnd={handleTouchEnd}
+                className="rounded-lg shadow-lg cursor-move touch-none border-4 border-gray-100"
+              />
+              <div className="absolute -bottom-3 left-1/2 transform -translate-x-1/2 bg-white px-3 py-1 rounded-full shadow-md border border-gray-200">
+                <span className="text-xs font-medium text-gray-600">ドラッグで移動</span>
+              </div>
+            </div>
+          </div>
+
+          {/* サイズ調整スライダー */}
+          <div className="bg-gradient-to-r from-blue-50 to-purple-50 rounded-xl p-4 border border-blue-100">
+            <div className="flex items-center justify-between mb-3">
+              <label className="text-sm font-semibold text-gray-700">
+                📏 切り抜きサイズ
+              </label>
+              <span className="text-lg font-bold text-blue-600">{Math.round(cropSize)}px</span>
+            </div>
+            <input
+              type="range"
+              min="50"
+              max={image ? Math.min(image.width, image.height) : 500}
+              value={cropSize}
+              onChange={handleSizeChange}
+              className="w-full h-3 bg-gradient-to-r from-blue-200 to-purple-200 rounded-full appearance-none cursor-pointer slider-thumb"
+              style={{
+                WebkitAppearance: 'none',
+                appearance: 'none',
+              }}
+            />
+            <div className="flex justify-between text-xs text-gray-500 mt-2">
+              <span className="font-medium">🔍 小</span>
+              <span className="font-medium">🔎 大</span>
+            </div>
           </div>
         </div>
 
-        <div className="flex gap-2 mt-auto">
+        {/* フッターボタン */}
+        <div className="p-6 bg-gray-50 border-t border-gray-100 flex gap-3">
           <button
             onClick={onCancel}
-            className="flex-1 px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400"
+            className="flex-1 px-6 py-3 bg-white border-2 border-gray-300 text-gray-700 rounded-xl font-semibold hover:bg-gray-50 hover:border-gray-400 transition-all shadow-sm"
           >
             キャンセル
           </button>
           <button
             onClick={handleCrop}
-            className="flex-1 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600"
+            className="flex-1 px-6 py-3 bg-gradient-to-r from-blue-500 to-purple-500 text-white rounded-xl font-semibold hover:from-blue-600 hover:to-purple-600 transition-all shadow-lg"
           >
-            切り抜く
+            ✓ 完了
           </button>
         </div>
       </div>
+
+      <style jsx>{`
+        .slider-thumb::-webkit-slider-thumb {
+          -webkit-appearance: none;
+          appearance: none;
+          width: 24px;
+          height: 24px;
+          border-radius: 50%;
+          background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+          cursor: pointer;
+          box-shadow: 0 2px 8px rgba(59, 130, 246, 0.4);
+          transition: transform 0.2s;
+        }
+        .slider-thumb::-webkit-slider-thumb:hover {
+          transform: scale(1.2);
+        }
+        .slider-thumb::-moz-range-thumb {
+          width: 24px;
+          height: 24px;
+          border-radius: 50%;
+          background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+          cursor: pointer;
+          box-shadow: 0 2px 8px rgba(59, 130, 246, 0.4);
+          transition: transform 0.2s;
+          border: none;
+        }
+        .slider-thumb::-moz-range-thumb:hover {
+          transform: scale(1.2);
+        }
+      `}</style>
     </div>
   );
 }
