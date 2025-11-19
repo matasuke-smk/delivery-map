@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import Map from './components/Map';
+import ImageCropper from './components/ImageCropper';
 import useDeliveryStore from './stores/deliveryStore';
 import locationTracker from './services/locationTracker';
 
@@ -8,6 +9,8 @@ function App() {
   const [isLoading, setIsLoading] = useState(true);
   const [showSettings, setShowSettings] = useState(false);
   const [geolocateControl, setGeolocateControl] = useState(null);
+  const [showImageCropper, setShowImageCropper] = useState(false);
+  const [tempImageUrl, setTempImageUrl] = useState(null);
 
   useEffect(() => {
     initApp();
@@ -194,10 +197,13 @@ function App() {
                       if (file) {
                         const reader = new FileReader();
                         reader.onloadend = () => {
-                          setCurrentLocationIcon(reader.result);
+                          setTempImageUrl(reader.result);
+                          setShowImageCropper(true);
                         };
                         reader.readAsDataURL(file);
                       }
+                      // ファイル選択をリセット（同じファイルを再選択可能にする）
+                      e.target.value = '';
                     }}
                     className="flex-1 text-sm text-gray-700"
                   />
@@ -214,6 +220,22 @@ function App() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* 画像切り抜きモーダル */}
+      {showImageCropper && tempImageUrl && (
+        <ImageCropper
+          imageUrl={tempImageUrl}
+          onCropComplete={(croppedImageUrl) => {
+            setCurrentLocationIcon(croppedImageUrl);
+            setShowImageCropper(false);
+            setTempImageUrl(null);
+          }}
+          onCancel={() => {
+            setShowImageCropper(false);
+            setTempImageUrl(null);
+          }}
+        />
       )}
     </div>
   );
