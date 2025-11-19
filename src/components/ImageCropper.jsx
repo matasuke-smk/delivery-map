@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 
 function ImageCropper({ imageUrl, onCropComplete, onCancel }) {
   const canvasRef = useRef(null);
@@ -6,6 +6,7 @@ function ImageCropper({ imageUrl, onCropComplete, onCancel }) {
   const [cropArea, setCropArea] = useState({ x: 0, y: 0, size: 200 });
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+  const [scale, setScale] = useState(1);
 
   useEffect(() => {
     const img = new Image();
@@ -18,19 +19,22 @@ function ImageCropper({ imageUrl, onCropComplete, onCancel }) {
         y: (img.height - size) / 2,
         size: size
       });
+
+      // スケールを計算
+      const maxWidth = 400;
+      const computedScale = Math.min(1, maxWidth / img.width);
+      setScale(computedScale);
     };
     img.src = imageUrl;
   }, [imageUrl]);
 
-  useEffect(() => {
+  const drawCanvas = useCallback(() => {
     if (!image || !canvasRef.current) return;
 
     const canvas = canvasRef.current;
     const ctx = canvas.getContext('2d');
 
     // キャンバスサイズを画像サイズに設定
-    const maxWidth = 400;
-    const scale = Math.min(1, maxWidth / image.width);
     canvas.width = image.width * scale;
     canvas.height = image.height * scale;
 
@@ -59,15 +63,19 @@ function ImageCropper({ imageUrl, onCropComplete, onCancel }) {
     ctx.strokeStyle = '#3B82F6';
     ctx.lineWidth = 2;
     ctx.strokeRect(scaledCrop.x, scaledCrop.y, scaledCrop.size, scaledCrop.size);
+  }, [image, cropArea, scale]);
 
-  }, [image, cropArea]);
+  useEffect(() => {
+    drawCanvas();
+  }, [drawCanvas]);
 
   const handleMouseDown = (e) => {
+    if (!canvasRef.current || !image) return;
+
     const canvas = canvasRef.current;
     const rect = canvas.getBoundingClientRect();
-    const scale = image.width / canvas.width;
-    const x = (e.clientX - rect.left) * scale;
-    const y = (e.clientY - rect.top) * scale;
+    const x = (e.clientX - rect.left) / scale;
+    const y = (e.clientY - rect.top) / scale;
 
     // クリックが切り抜き領域内かチェック
     if (
@@ -82,13 +90,12 @@ function ImageCropper({ imageUrl, onCropComplete, onCancel }) {
   };
 
   const handleMouseMove = (e) => {
-    if (!isDragging) return;
+    if (!isDragging || !canvasRef.current || !image) return;
 
     const canvas = canvasRef.current;
     const rect = canvas.getBoundingClientRect();
-    const scale = image.width / canvas.width;
-    const x = (e.clientX - rect.left) * scale;
-    const y = (e.clientY - rect.top) * scale;
+    const x = (e.clientX - rect.left) / scale;
+    const y = (e.clientY - rect.top) / scale;
 
     const newX = Math.max(0, Math.min(x - dragStart.x, image.width - cropArea.size));
     const newY = Math.max(0, Math.min(y - dragStart.y, image.height - cropArea.size));
@@ -116,13 +123,23 @@ function ImageCropper({ imageUrl, onCropComplete, onCancel }) {
     onCropComplete(croppedImageUrl);
   };
 
+  if (!image) {
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-[60] p-4">
+        <div className="bg-white rounded-lg p-6">
+          <p className="text-gray-700">画像を読み込み中...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg p-6 max-w-md w-full">
-        <h3 className="text-lg font-bold mb-4">画像を切り抜く</h3>
+    <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-[60] p-4">
+      <div className="bg-white rounded-lg p-6 max-w-md w-full max-h-[90vh] flex flex-col">
+        <h3 className="text-lg font-bold mb-2">画像を切り抜く</h3>
         <p className="text-sm text-gray-600 mb-4">青い枠をドラッグして切り抜く範囲を選択してください</p>
 
-        <div className="mb-4 flex justify-center">
+        <div className="mb-4 flex justify-center overflow-auto">
           <canvas
             ref={canvasRef}
             onMouseDown={handleMouseDown}
@@ -133,7 +150,7 @@ function ImageCropper({ imageUrl, onCropComplete, onCancel }) {
           />
         </div>
 
-        <div className="flex gap-2">
+        <div className="flex gap-2 mt-auto">
           <button
             onClick={onCancel}
             className="flex-1 px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400"
