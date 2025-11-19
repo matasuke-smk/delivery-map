@@ -9,7 +9,7 @@ const useDeliveryStore = create((set, get) => ({
   routes: [],
   currentRoute: null,
   destination: null,
-  showTraffic: true,
+  showTraffic: false,
 
   // 位置更新
   setCurrentLocation: (location) => set({ currentLocation: location }),

@@ -66,12 +66,26 @@ function Map() {
         const layers = map.current.getStyle().layers;
         layers.forEach((layer) => {
           if (layer.layout && layer.layout['text-field']) {
-            // 日本語のテキストフィールドに変更
-            map.current.setLayoutProperty(
-              layer.id,
-              'text-field',
-              ['coalesce', ['get', 'name_ja'], ['get', 'name_en'], ['get', 'name']]
-            );
+            // 道路番号を含むレイヤーの場合
+            if (layer.id.includes('road') || layer.id.includes('highway') || layer.id.includes('shield')) {
+              map.current.setLayoutProperty(
+                layer.id,
+                'text-field',
+                [
+                  'format',
+                  ['coalesce', ['get', 'ref'], ''], {},
+                  '\n', {},
+                  ['coalesce', ['get', 'name_ja'], ['get', 'name_en'], ['get', 'name'], ''], {}
+                ]
+              );
+            } else {
+              // 他のレイヤーは日本語名のみ
+              map.current.setLayoutProperty(
+                layer.id,
+                'text-field',
+                ['coalesce', ['get', 'name_ja'], ['get', 'name_en'], ['get', 'name']]
+              );
+            }
           }
         });
 
@@ -86,6 +100,11 @@ function Map() {
           type: 'line',
           source: 'mapbox-traffic',
           'source-layer': 'traffic',
+          filter: [
+            'in',
+            ['get', 'class'],
+            ['literal', ['motorway', 'trunk', 'primary', 'secondary']]
+          ],
           paint: {
             'line-width': 4,
             'line-color': [
