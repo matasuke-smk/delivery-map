@@ -10,6 +10,7 @@ const useDeliveryStore = create((set, get) => ({
   currentRoute: null,
   destination: null,
   showTraffic: false,
+  useTollRoads: false,
 
   // 位置更新
   setCurrentLocation: (location) => set({ currentLocation: location }),
@@ -25,6 +26,9 @@ const useDeliveryStore = create((set, get) => ({
 
   // 交通状況表示切り替え
   toggleTraffic: () => set((state) => ({ showTraffic: !state.showTraffic })),
+
+  // 有料道路使用切り替え
+  toggleTollRoads: () => set((state) => ({ useTollRoads: !state.useTollRoads })),
 
   // 店舗管理
   addOrUpdateStore: async (location) => {

@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import Map from './components/Map';
 import StoreList from './components/StoreList';
-import RouteInfo from './components/RouteInfo';
 import useDeliveryStore from './stores/deliveryStore';
 import locationTracker from './services/locationTracker';
 
@@ -79,12 +78,6 @@ function App() {
         }`}>
           <StoreList />
         </div>
-
-        <div className={`absolute inset-0 transition-transform duration-300 ${
-          activeTab === 'route' ? 'translate-x-0' : 'translate-x-full'
-        }`}>
-          <RouteInfo />
-        </div>
       </main>
 
       {/* タブバー */}
@@ -113,19 +106,6 @@ function App() {
           <div className="text-center">
             <div className="text-xl mb-1">📍</div>
             <div className="text-xs">店舗</div>
-          </div>
-        </button>
-        <button
-          onClick={() => setActiveTab('route')}
-          className={`flex-1 py-4 transition-colors ${
-            activeTab === 'route'
-              ? 'bg-black text-white'
-              : 'text-gray-600 hover:bg-gray-100'
-          }`}
-        >
-          <div className="text-center">
-            <div className="text-xl mb-1">📊</div>
-            <div className="text-xs">分析</div>
           </div>
         </button>
       </nav>

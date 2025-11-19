@@ -16,6 +16,9 @@ function Map() {
     destination,
     setDestination,
     showTraffic,
+    toggleTraffic,
+    useTollRoads,
+    toggleTollRoads,
     setCurrentLocation
   } = useDeliveryStore();
   const routeMarker = useRef(null);
@@ -101,6 +104,9 @@ function Map() {
             ['get', 'class'],
             ['literal', ['motorway', 'trunk', 'primary', 'secondary']]
           ],
+          layout: {
+            'visibility': 'none'
+          },
           paint: {
             'line-width': 4,
             'line-color': [
@@ -155,7 +161,9 @@ function Map() {
   // ルート検索関数
   const searchRoute = async (origin, destination) => {
     try {
-      const url = `https://api.mapbox.com/directions/v5/mapbox/driving/${origin.lng},${origin.lat};${destination.lng},${destination.lat}?geometries=geojson&access_token=${mapboxgl.accessToken}&language=ja&alternatives=true&steps=true&overview=full`;
+      const storeState = useDeliveryStore.getState();
+      const excludeParam = storeState.useTollRoads ? '' : '&exclude=toll';
+      const url = `https://api.mapbox.com/directions/v5/mapbox/driving/${origin.lng},${origin.lat};${destination.lng},${destination.lat}?geometries=geojson&access_token=${mapboxgl.accessToken}&language=ja&alternatives=true&steps=true&overview=full${excludeParam}`;
 
       const response = await fetch(url);
       const data = await response.json();
@@ -229,6 +237,16 @@ function Map() {
     );
   }, [showTraffic]);
 
+  // 有料道路設定変更時にルート再検索
+  useEffect(() => {
+    if (currentRoute && destination) {
+      const storeState = useDeliveryStore.getState();
+      if (storeState.currentLocation) {
+        searchRoute(storeState.currentLocation, destination);
+      }
+    }
+  }, [useTollRoads]);
+
   // 店舗マーカー更新
   useEffect(() => {
     if (!map.current) return;
@@ -262,7 +280,72 @@ function Map() {
     });
   }, [stores]);
 
-  return <div ref={mapContainer} className="w-full h-full" />;
+  const handleStartNavigation = () => {
+    if (currentRoute && destination) {
+      // Google Mapsで開く
+      const url = `https://www.google.com/maps/dir/?api=1&origin=${currentLocation.lat},${currentLocation.lng}&destination=${destination.lat},${destination.lng}&travelmode=driving`;
+      window.open(url, '_blank');
+    }
+  };
+
+  return (
+    <div className="w-full h-full relative">
+      <div ref={mapContainer} className="w-full h-full" />
+
+      {/* ルート情報とコントロール */}
+      {currentRoute && (
+        <div className="absolute bottom-0 left-0 right-0 bg-white shadow-lg border-t border-gray-200 p-4">
+          {/* 距離と時間 */}
+          <div className="flex gap-4 mb-3">
+            <div className="flex-1 bg-blue-50 rounded-lg p-3">
+              <div className="text-xs text-gray-600 mb-1">距離</div>
+              <div className="text-xl font-bold text-blue-600">
+                {(currentRoute.distance / 1000).toFixed(1)} km
+              </div>
+            </div>
+            <div className="flex-1 bg-green-50 rounded-lg p-3">
+              <div className="text-xs text-gray-600 mb-1">所要時間</div>
+              <div className="text-xl font-bold text-green-600">
+                {Math.round(currentRoute.duration / 60)} 分
+              </div>
+            </div>
+          </div>
+
+          {/* コントロールボタン */}
+          <div className="flex gap-2 mb-3">
+            <button
+              onClick={toggleTraffic}
+              className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-colors ${
+                showTraffic
+                  ? 'bg-orange-500 text-white'
+                  : 'bg-gray-200 text-gray-700'
+              }`}
+            >
+              {showTraffic ? '🟢 交通状況' : '⚪ 交通状況'}
+            </button>
+            <button
+              onClick={toggleTollRoads}
+              className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-colors ${
+                useTollRoads
+                  ? 'bg-blue-500 text-white'
+                  : 'bg-gray-200 text-gray-700'
+              }`}
+            >
+              {useTollRoads ? '🟢 有料道路' : '⚪ 有料道路'}
+            </button>
+          </div>
+
+          {/* 開始ボタン */}
+          <button
+            onClick={handleStartNavigation}
+            className="w-full bg-black text-white py-3 rounded-lg font-bold text-lg hover:bg-gray-800 transition-colors"
+          >
+            ナビ開始
+          </button>
+        </div>
+      )}
+    </div>
+  );
 }
 
 export default Map;
