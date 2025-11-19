@@ -51,9 +51,9 @@ function App() {
 
       {/* 設定モーダル */}
       {showSettings && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={() => setShowSettings(false)}>
-          <div className="bg-white rounded-lg p-6 m-4 max-w-sm w-full" onClick={(e) => e.stopPropagation()}>
-            <div className="flex justify-between items-center mb-6">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" onClick={() => setShowSettings(false)}>
+          <div className="bg-white rounded-lg w-full max-w-sm max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+            <div className="flex justify-between items-center p-6 pb-4 border-b border-gray-200 flex-shrink-0">
               <h2 className="text-xl font-bold">設定</h2>
               <button
                 onClick={() => setShowSettings(false)}
@@ -65,7 +65,7 @@ function App() {
               </button>
             </div>
 
-            <div className="space-y-4">
+            <div className="space-y-4 p-6 overflow-y-auto flex-1">
               {/* 現在位置取得 */}
               <div className="p-4 bg-gray-50 rounded-lg">
                 <button
