@@ -5,9 +5,10 @@ import useDeliveryStore from '../stores/deliveryStore';
 // Mapboxトークン設定
 mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN || '';
 
-function Map() {
+function Map({ onOpenSettings }) {
   const mapContainer = useRef(null);
   const map = useRef(null);
+  const [isOverviewMode, setIsOverviewMode] = React.useState(false);
   const {
     stores,
     currentLocation,
@@ -334,12 +335,13 @@ function Map() {
     if (currentRoute && destination) {
       startNavigation();
       lastSpokenStep.current = -1;
+      setIsOverviewMode(false);
 
       // 最初の案内を音声で
       const firstStep = currentRoute.legs[0].steps[0];
       speak(`ナビゲーションを開始します。${firstStep.maneuver.instruction}`);
 
-      // カメラを現在位置中心に、進行方向を上に
+      // カメラを現在位置中心に、進行方向を上に、現在位置を画面下から2/5に
       if (map.current && currentLocation) {
         const nextPoint = {
           lat: firstStep.maneuver.location[1],
@@ -347,14 +349,60 @@ function Map() {
         };
         const bearing = calculateBearing(currentLocation, nextPoint);
 
+        // 画面の高さを取得してpaddingを計算
+        const mapHeight = map.current.getContainer().offsetHeight;
+        const topPadding = mapHeight * 0.6; // 現在位置が下から2/5 = 上から3/5
+
         map.current.flyTo({
           center: [currentLocation.lng, currentLocation.lat],
           zoom: 17,
           pitch: 60,
           bearing: bearing,
+          padding: { top: topPadding, bottom: 0, left: 0, right: 0 },
           duration: 2000
         });
       }
+    }
+  };
+
+  const toggleOverviewMode = () => {
+    if (!currentRoute || !currentLocation) return;
+
+    if (isOverviewMode) {
+      // ズームモードに戻る
+      const steps = currentRoute.legs[0].steps;
+      const currentStep = steps[currentStepIndex];
+      const nextPoint = {
+        lat: currentStep.maneuver.location[1],
+        lng: currentStep.maneuver.location[0]
+      };
+      const bearing = calculateBearing(currentLocation, nextPoint);
+      const mapHeight = map.current.getContainer().offsetHeight;
+      const topPadding = mapHeight * 0.6;
+
+      map.current.flyTo({
+        center: [currentLocation.lng, currentLocation.lat],
+        zoom: 17,
+        pitch: 60,
+        bearing: bearing,
+        padding: { top: topPadding, bottom: 0, left: 0, right: 0 },
+        duration: 1000
+      });
+      setIsOverviewMode(false);
+    } else {
+      // 全体表示モード
+      const coordinates = currentRoute.geometry.coordinates;
+      const bounds = coordinates.reduce((bounds, coord) => {
+        return bounds.extend(coord);
+      }, new mapboxgl.LngLatBounds(coordinates[0], coordinates[0]));
+
+      map.current.fitBounds(bounds, {
+        padding: { top: 80, bottom: 200, left: 50, right: 50 },
+        pitch: 0,
+        bearing: 0,
+        duration: 1000
+      });
+      setIsOverviewMode(true);
     }
   };
 
@@ -382,6 +430,7 @@ function Map() {
       map.current.easeTo({
         pitch: 0,
         bearing: 0,
+        padding: { top: 0, bottom: 0, left: 0, right: 0 },
         duration: 1000
       });
     }
@@ -396,7 +445,29 @@ function Map() {
       // 到着
       speak('目的地に到着しました');
       setTimeout(() => {
-        handleStopNavigation();
+        // 音声停止
+        if ('speechSynthesis' in window) {
+          window.speechSynthesis.cancel();
+        }
+        stopNavigation();
+
+        // カメラリセット
+        if (map.current && routeMarker.current) {
+          routeMarker.current.remove();
+          routeMarker.current = null;
+        }
+        if (map.current && map.current.getSource('route')) {
+          map.current.removeLayer('route');
+          map.current.removeSource('route');
+        }
+        if (map.current) {
+          map.current.easeTo({
+            pitch: 0,
+            bearing: 0,
+            padding: { top: 0, bottom: 0, left: 0, right: 0 },
+            duration: 1000
+          });
+        }
       }, 2000);
       return;
     }
@@ -433,33 +504,53 @@ function Map() {
     }
 
     // カメラを現在位置追従、進行方向を上に（Google Mapsスタイル）
-    if (map.current) {
+    // 全体表示モードでは追従しない
+    if (map.current && !isOverviewMode) {
       const bearing = calculateBearing(currentLocation, nextPoint);
+      const mapHeight = map.current.getContainer().offsetHeight;
+      const topPadding = mapHeight * 0.6;
 
       map.current.easeTo({
         center: [currentLocation.lng, currentLocation.lat],
         bearing: bearing,
+        padding: { top: topPadding, bottom: 0, left: 0, right: 0 },
         duration: 1000,
         easing: (t) => t // リニア補間でスムーズに
       });
     }
-  }, [currentLocation, isNavigating, currentStepIndex]);
+  }, [currentLocation, isNavigating, currentStepIndex, isOverviewMode, stopNavigation]);
 
   return (
     <div className="w-full h-full relative">
       <div ref={mapContainer} className="w-full h-full" />
 
-      {/* ナビゲーション中のUI */}
+      {/* 設定アイコン（左上） */}
+      <button
+        onClick={onOpenSettings}
+        className="absolute top-4 left-4 p-3 rounded-full bg-white shadow-lg hover:bg-gray-100 transition-colors z-10"
+      >
+        <svg className="w-6 h-6 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+        </svg>
+      </button>
+
+      {/* ナビ終了ボタン（左上、ナビ中のみ） */}
+      {isNavigating && (
+        <button
+          onClick={handleStopNavigation}
+          className="absolute top-4 left-20 px-4 py-3 rounded-full bg-red-500 text-white shadow-lg hover:bg-red-600 transition-colors z-10 font-bold"
+        >
+          終了
+        </button>
+      )}
+
+      {/* ナビゲーション中のUI（画面下） */}
       {isNavigating && currentRoute && currentLocation && (
-        <div className="absolute top-0 left-0 right-0 bg-white shadow-lg p-4">
+        <div className="absolute bottom-0 left-0 right-0" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
           {(() => {
             const steps = currentRoute.legs[0].steps;
             const currentStep = steps[currentStepIndex];
-            const nextPoint = {
-              lat: currentStep.maneuver.location[1],
-              lng: currentStep.maneuver.location[0]
-            };
-            const distanceToNext = calculateDistance(currentLocation, nextPoint);
 
             // 残りの総距離を計算
             let remainingDistance = 0;
@@ -467,56 +558,34 @@ function Map() {
               remainingDistance += steps[i].distance;
             }
 
-            // 方向アイコンの取得
-            const getDirectionIcon = (type) => {
-              const icons = {
-                'turn-right': '➡️',
-                'turn-left': '⬅️',
-                'sharp-right': '↗️',
-                'sharp-left': '↖️',
-                'slight-right': '↗️',
-                'slight-left': '↖️',
-                'straight': '⬆️',
-                'uturn': '🔃',
-                'arrive': '🏁'
-              };
-              return icons[type] || '⬆️';
-            };
+            // 残り時間を計算（現在のステップ以降の時間）
+            let remainingDuration = 0;
+            for (let i = currentStepIndex; i < steps.length; i++) {
+              remainingDuration += steps[i].duration;
+            }
 
             return (
               <>
-                {/* 次の案内 */}
-                <div className="bg-blue-600 text-white p-4 rounded-lg mb-3">
-                  <div className="flex items-center gap-3">
-                    <div className="text-4xl">{getDirectionIcon(currentStep.maneuver.type)}</div>
-                    <div className="flex-1">
-                      <div className="text-sm opacity-80">あと {distanceToNext < 1000 ? `${Math.round(distanceToNext)}m` : `${(distanceToNext / 1000).toFixed(1)}km`}</div>
-                      <div className="text-lg font-bold">{currentStep.maneuver.instruction}</div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* 残り距離と時間 */}
-                <div className="flex gap-3 mb-3">
-                  <div className="flex-1 bg-gray-50 rounded-lg p-2 text-center">
-                    <div className="text-xs text-gray-600">残り距離</div>
-                    <div className="text-lg font-bold">{(remainingDistance / 1000).toFixed(1)} km</div>
-                  </div>
-                  <div className="flex-1 bg-gray-50 rounded-lg p-2 text-center">
-                    <div className="text-xs text-gray-600">到着予定</div>
-                    <div className="text-lg font-bold">
-                      {new Date(Date.now() + currentRoute.duration * 1000).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })}
-                    </div>
-                  </div>
-                </div>
-
-                {/* 終了ボタン */}
-                <button
-                  onClick={handleStopNavigation}
-                  className="w-full bg-red-500 text-white py-2 rounded-lg font-bold hover:bg-red-600 transition-colors"
+                {/* 残り距離と到着予定時間（タップで全体表示切り替え） */}
+                <div
+                  onClick={toggleOverviewMode}
+                  className="bg-white shadow-lg p-4 cursor-pointer active:bg-gray-50 transition-colors"
                 >
-                  ナビ終了
-                </button>
+                  <div className="flex gap-4">
+                    <div className="flex-1 text-center">
+                      <div className="text-sm text-gray-600 mb-1">残り距離</div>
+                      <div className="text-2xl font-bold text-blue-600">
+                        {(remainingDistance / 1000).toFixed(1)} km
+                      </div>
+                    </div>
+                    <div className="flex-1 text-center">
+                      <div className="text-sm text-gray-600 mb-1">到着予定</div>
+                      <div className="text-2xl font-bold text-green-600">
+                        {new Date(Date.now() + remainingDuration * 1000).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })}
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </>
             );
           })()}
