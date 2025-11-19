@@ -341,7 +341,7 @@ function Map({ onOpenSettings }) {
       const firstStep = currentRoute.legs[0].steps[0];
       speak(`ナビゲーションを開始します。${firstStep.maneuver.instruction}`);
 
-      // カメラを現在位置中心に、進行方向を上に、現在位置を画面下から2/5に
+      // カメラを現在位置中心に、進行方向を上に、現在位置を画面下から1/5に
       if (map.current && currentLocation) {
         const nextPoint = {
           lat: firstStep.maneuver.location[1],
@@ -349,13 +349,17 @@ function Map({ onOpenSettings }) {
         };
         const bearing = calculateBearing(currentLocation, nextPoint);
 
-        // 画面の高さを取得してpaddingを計算（現在位置が下から2/5の位置）
+        // 画面の高さを取得してpaddingを計算（現在位置が下から1/5の位置）
         const mapHeight = map.current.getContainer().offsetHeight;
-        const bottomPadding = mapHeight * 0.4; // 下部40%をパディング
+        const bottomPadding = mapHeight * 0.8; // 下部80%をパディング（現在位置が下から1/5）
+
+        // 最大ズーム-5
+        const maxZoom = map.current.getMaxZoom();
+        const targetZoom = maxZoom - 5;
 
         map.current.flyTo({
           center: [currentLocation.lng, currentLocation.lat],
-          zoom: 17,
+          zoom: targetZoom,
           pitch: 60,
           bearing: bearing,
           padding: { top: 0, bottom: bottomPadding, left: 0, right: 0 },
@@ -378,11 +382,15 @@ function Map({ onOpenSettings }) {
       };
       const bearing = calculateBearing(currentLocation, nextPoint);
       const mapHeight = map.current.getContainer().offsetHeight;
-      const bottomPadding = mapHeight * 0.4;
+      const bottomPadding = mapHeight * 0.8; // 下から1/5の位置
+
+      // 最大ズーム-5
+      const maxZoom = map.current.getMaxZoom();
+      const targetZoom = maxZoom - 5;
 
       map.current.flyTo({
         center: [currentLocation.lng, currentLocation.lat],
-        zoom: 17,
+        zoom: targetZoom,
         pitch: 60,
         bearing: bearing,
         padding: { top: 0, bottom: bottomPadding, left: 0, right: 0 },
@@ -508,7 +516,7 @@ function Map({ onOpenSettings }) {
     if (map.current && !isOverviewMode) {
       const bearing = calculateBearing(currentLocation, nextPoint);
       const mapHeight = map.current.getContainer().offsetHeight;
-      const bottomPadding = mapHeight * 0.4;
+      const bottomPadding = mapHeight * 0.8; // 下から1/5の位置
 
       map.current.easeTo({
         center: [currentLocation.lng, currentLocation.lat],
