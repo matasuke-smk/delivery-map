@@ -25,7 +25,8 @@ function Map({ onOpenSettings }) {
     startNavigation,
     stopNavigation,
     setCurrentStepIndex,
-    setCurrentLocation
+    setCurrentLocation,
+    mapPitch
   } = useDeliveryStore();
   const routeMarker = useRef(null);
   const lastSpokenStep = useRef(-1);
@@ -60,6 +61,7 @@ function Map({ onOpenSettings }) {
         const storeState = useDeliveryStore.getState();
         if (storeState.isNavigating) {
           userInteracted.current = true;
+          setShowRecenterButton(true); // スワイプしたら即座にボタン表示
         }
       });
 
@@ -378,7 +380,7 @@ function Map({ onOpenSettings }) {
         map.current.flyTo({
           center: [currentLocation.lng, currentLocation.lat],
           zoom: targetZoom,
-          pitch: 60,
+          pitch: mapPitch,
           bearing: bearing,
           padding: { top: topPadding, bottom: bottomPadding, left: 0, right: 0 },
           duration: 2000
@@ -403,7 +405,7 @@ function Map({ onOpenSettings }) {
     map.current.flyTo({
       center: [currentLocation.lng, currentLocation.lat],
       zoom: 17,
-      pitch: 60,
+      pitch: mapPitch,
       bearing: bearing,
       padding: { top: topPadding, bottom: 0, left: 0, right: 0 },
       duration: 1000
@@ -435,7 +437,7 @@ function Map({ onOpenSettings }) {
       map.current.flyTo({
         center: [currentLocation.lng, currentLocation.lat],
         zoom: targetZoom,
-        pitch: 60,
+        pitch: mapPitch,
         bearing: bearing,
         padding: { top: topPadding, bottom: bottomPadding, left: 0, right: 0 },
         duration: 1000
@@ -569,45 +571,14 @@ function Map({ onOpenSettings }) {
       map.current.easeTo({
         center: [currentLocation.lng, currentLocation.lat],
         zoom: 17,
+        pitch: mapPitch,
         bearing: bearing,
         padding: { top: topPadding, bottom: bottomPadding, left: 0, right: 0 },
         duration: 1000,
         easing: (t) => t // リニア補間でスムーズに
       });
     }
-  }, [currentLocation, isNavigating, currentStepIndex, isOverviewMode, stopNavigation]);
-
-  // カメラ位置チェック（ナビ中、ユーザー操作後）
-  useEffect(() => {
-    if (!map.current || !isNavigating || !userInteracted.current || !currentLocation) {
-      return;
-    }
-
-    const checkCameraPosition = () => {
-      if (!map.current || !currentLocation) return;
-
-      const center = map.current.getCenter();
-      const distance = calculateDistance(
-        currentLocation,
-        { lat: center.lat, lng: center.lng }
-      );
-
-      // 100m以上離れたらボタン表示
-      if (distance > 100) {
-        setShowRecenterButton(true);
-      } else {
-        setShowRecenterButton(false);
-      }
-    };
-
-    map.current.on('moveend', checkCameraPosition);
-
-    return () => {
-      if (map.current) {
-        map.current.off('moveend', checkCameraPosition);
-      }
-    };
-  }, [isNavigating, currentLocation]);
+  }, [currentLocation, isNavigating, currentStepIndex, isOverviewMode, stopNavigation, mapPitch]);
 
   return (
     <div className="w-full h-full relative">

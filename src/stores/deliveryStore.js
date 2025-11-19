@@ -13,6 +13,7 @@ const useDeliveryStore = create((set, get) => ({
   useTollRoads: false,
   isNavigating: false,
   currentStepIndex: 0,
+  mapPitch: 60, // 地図の角度（0-85度）
 
   // 位置更新
   setCurrentLocation: (location) => set({ currentLocation: location }),
@@ -36,6 +37,9 @@ const useDeliveryStore = create((set, get) => ({
   startNavigation: () => set({ isNavigating: true, currentStepIndex: 0 }),
   stopNavigation: () => set({ isNavigating: false, currentStepIndex: 0, currentRoute: null, destination: null }),
   setCurrentStepIndex: (index) => set({ currentStepIndex: index }),
+
+  // 地図角度設定
+  setMapPitch: (pitch) => set({ mapPitch: pitch }),
 
   // 店舗管理
   addOrUpdateStore: async (location) => {

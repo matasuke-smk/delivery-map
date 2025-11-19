@@ -4,7 +4,7 @@ import useDeliveryStore from './stores/deliveryStore';
 import locationTracker from './services/locationTracker';
 
 function App() {
-  const { loadData, showTraffic, toggleTraffic, useTollRoads, toggleTollRoads } = useDeliveryStore();
+  const { loadData, showTraffic, toggleTraffic, useTollRoads, toggleTollRoads, mapPitch, setMapPitch } = useDeliveryStore();
   const [isLoading, setIsLoading] = useState(true);
   const [showSettings, setShowSettings] = useState(false);
 
@@ -96,6 +96,30 @@ function App() {
                     useTollRoads ? 'translate-x-6' : 'translate-x-1'
                   }`} />
                 </button>
+              </div>
+
+              {/* 地図の角度 */}
+              <div className="p-4 bg-gray-50 rounded-lg">
+                <div className="mb-3">
+                  <div className="font-semibold text-gray-900">地図の角度</div>
+                  <div className="text-sm text-gray-500">ナビ中の地図の傾き（0°=真上、60°=斜め）</div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="text-sm text-gray-600 w-8">0°</span>
+                  <input
+                    type="range"
+                    min="0"
+                    max="85"
+                    step="5"
+                    value={mapPitch}
+                    onChange={(e) => setMapPitch(Number(e.target.value))}
+                    className="flex-1 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                  />
+                  <span className="text-sm text-gray-600 w-8">85°</span>
+                </div>
+                <div className="text-center mt-2">
+                  <span className="text-lg font-bold text-blue-600">{mapPitch}°</span>
+                </div>
               </div>
             </div>
           </div>
