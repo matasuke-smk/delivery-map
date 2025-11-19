@@ -10,6 +10,7 @@ function Map({ onOpenSettings, onGeolocateReady }) {
   const map = useRef(null);
   const [isOverviewMode, setIsOverviewMode] = React.useState(false);
   const [showRecenterButton, setShowRecenterButton] = React.useState(false);
+  const [mapError, setMapError] = React.useState(null);
   const userInteracted = useRef(false);
   const [compassHeading, setCompassHeading] = React.useState(null);
   const lastPosition = useRef(null);
@@ -330,6 +331,7 @@ function Map({ onOpenSettings, onGeolocateReady }) {
       });
     } catch (error) {
       console.error('マップ初期化エラー:', error);
+      setMapError(error.message || 'マップの初期化に失敗しました');
     }
   }, []);
 
@@ -897,6 +899,31 @@ function Map({ onOpenSettings, onGeolocateReady }) {
   return (
     <div className="w-full h-full relative">
       <div ref={mapContainer} className="w-full h-full" />
+
+      {/* マップエラー表示 */}
+      {mapError && (
+        <div className="absolute inset-0 bg-gray-900 bg-opacity-95 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md mx-4 text-center">
+            <div className="text-red-500 text-5xl mb-4">⚠️</div>
+            <h3 className="text-xl font-bold text-gray-900 mb-2">マップを読み込めません</h3>
+            <p className="text-gray-600 mb-4">{mapError}</p>
+            <div className="text-sm text-gray-500 mb-4">
+              <p>以下を確認してください：</p>
+              <ul className="list-disc list-inside text-left mt-2">
+                <li>ブラウザがWebGLをサポートしているか</li>
+                <li>ハードウェアアクセラレーションが有効か</li>
+                <li>別のブラウザで試してみる</li>
+              </ul>
+            </div>
+            <button
+              onClick={() => window.location.reload()}
+              className="px-6 py-3 bg-blue-500 text-white rounded-lg font-semibold hover:bg-blue-600 transition-colors"
+            >
+              再読み込み
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* 設定アイコン（左上） */}
       <button

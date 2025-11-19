@@ -12,13 +12,19 @@ class LocationTracker {
 
   async startTracking() {
     try {
-      // 権限チェック
-      const permission = await Geolocation.checkPermissions();
-      if (permission.location !== 'granted') {
-        const request = await Geolocation.requestPermissions();
-        if (request.location !== 'granted') {
-          console.error('位置情報の権限が拒否されました');
-          return;
+      // Web環境の場合は権限リクエストをスキップ
+      // (ブラウザのGeolocation APIが自動的に権限を要求します)
+      const isWeb = !window.Capacitor || window.Capacitor.getPlatform() === 'web';
+
+      if (!isWeb) {
+        // ネイティブアプリの場合のみ権限チェック
+        const permission = await Geolocation.checkPermissions();
+        if (permission.location !== 'granted') {
+          const request = await Geolocation.requestPermissions();
+          if (request.location !== 'granted') {
+            console.error('位置情報の権限が拒否されました');
+            return;
+          }
         }
       }
 
@@ -34,6 +40,7 @@ class LocationTracker {
       useDeliveryStore.getState().setTrackingStatus('tracking');
     } catch (error) {
       console.error('位置追跡エラー:', error);
+      // Web環境でエラーが出た場合は無視（Map.jsxのGeolocateControlが代わりに処理）
     }
   }
 
