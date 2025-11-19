@@ -47,11 +47,17 @@ function Map() {
 
       // GPS位置取得時にストアを更新
       geolocate.on('geolocate', (e) => {
-        setCurrentLocation({
+        const newLocation = {
           lat: e.coords.latitude,
           lng: e.coords.longitude
-        });
-        console.log('GPS位置更新:', { lat: e.coords.latitude, lng: e.coords.longitude });
+        };
+        console.log('🟢 GPS位置取得:', newLocation);
+        setCurrentLocation(newLocation);
+        console.log('🟢 ストア更新完了');
+      });
+
+      geolocate.on('error', (e) => {
+        console.error('🔴 GPS取得エラー:', e);
       });
 
       // マップロード後に現在位置を取得と日本語設定
@@ -100,8 +106,11 @@ function Map() {
       map.current.on('click', async (e) => {
         const { lng, lat } = e.lngLat;
 
-        console.log('地図クリック:', { lat, lng });
-        console.log('現在位置:', currentLocation);
+        console.log('🔵 地図クリック:', { lat, lng });
+
+        // ストアから最新の位置情報を取得
+        const storeState = useDeliveryStore.getState();
+        console.log('🔵 ストア内のcurrentLocation:', storeState.currentLocation);
 
         // 目的地マーカーを更新
         if (routeMarker.current) {
@@ -115,11 +124,11 @@ function Map() {
         setDestination({ lat, lng });
 
         // 現在位置がある場合はルート検索
-        if (currentLocation && currentLocation.lat && currentLocation.lng) {
-          console.log('ルート検索開始');
-          await searchRoute(currentLocation, { lat, lng });
+        if (storeState.currentLocation && storeState.currentLocation.lat && storeState.currentLocation.lng) {
+          console.log('🔵 ルート検索開始');
+          await searchRoute(storeState.currentLocation, { lat, lng });
         } else {
-          console.warn('現在位置が取得できていません。位置情報を許可してください。');
+          console.warn('🔴 現在位置が取得できていません');
           alert('現在位置が取得できていません。位置情報を許可してから、地図の現在位置ボタンをクリックしてください。');
         }
       });
