@@ -15,7 +15,8 @@ function Map() {
     setCurrentRoute,
     destination,
     setDestination,
-    showTraffic
+    showTraffic,
+    setCurrentLocation
   } = useDeliveryStore();
   const routeMarker = useRef(null);
 
@@ -43,6 +44,15 @@ function Map() {
       });
 
       map.current.addControl(geolocate);
+
+      // GPS位置取得時にストアを更新
+      geolocate.on('geolocate', (e) => {
+        setCurrentLocation({
+          lat: e.coords.latitude,
+          lng: e.coords.longitude
+        });
+        console.log('GPS位置更新:', { lat: e.coords.latitude, lng: e.coords.longitude });
+      });
 
       // マップロード後に現在位置を取得と日本語設定
       map.current.on('load', () => {

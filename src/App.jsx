@@ -49,9 +49,9 @@ function App() {
   }
 
   return (
-    <div className="h-screen flex flex-col bg-gray-100">
+    <div className="flex flex-col bg-gray-100" style={{ height: '100vh', height: '100dvh' }}>
       {/* ヘッダー */}
-      <header className="bg-black text-white p-4 flex justify-between items-center shadow-lg">
+      <header className="bg-black text-white p-4 flex justify-between items-center shadow-lg flex-shrink-0">
         <h1 className="text-xl font-bold">🏍️ 配達マップ</h1>
         <button
           onClick={toggleTracking}
@@ -67,7 +67,7 @@ function App() {
       </header>
 
       {/* メインコンテンツ */}
-      <main className="flex-1 relative overflow-hidden">
+      <main className="flex-1 relative overflow-hidden" style={{ minHeight: 0 }}>
         <div className={`absolute inset-0 transition-transform duration-300 ${
           activeTab === 'map' ? 'translate-x-0' : '-translate-x-full'
         }`}>
@@ -88,7 +88,7 @@ function App() {
       </main>
 
       {/* タブバー */}
-      <nav className="bg-white border-t flex shadow-lg">
+      <nav className="bg-white border-t flex shadow-lg flex-shrink-0" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
         <button
           onClick={() => setActiveTab('map')}
           className={`flex-1 py-4 transition-colors ${
