@@ -11,6 +11,9 @@ function Map({ onOpenSettings }) {
   const [isOverviewMode, setIsOverviewMode] = React.useState(false);
   const [showRecenterButton, setShowRecenterButton] = React.useState(false);
   const userInteracted = useRef(false);
+  const [compassHeading, setCompassHeading] = React.useState(null);
+  const lastPosition = useRef(null);
+  const currentSpeed = useRef(0);
   const {
     stores,
     currentLocation,
@@ -45,17 +48,6 @@ function Map({ onOpenSettings }) {
       // コントロール追加
       map.current.addControl(new mapboxgl.NavigationControl(), 'top-right');
 
-      // 現在位置コントロール
-      const geolocate = new mapboxgl.GeolocateControl({
-        positionOptions: {
-          enableHighAccuracy: true
-        },
-        trackUserLocation: true,
-        showUserHeading: true
-      });
-
-      map.current.addControl(geolocate);
-
       // ユーザーのドラッグ操作を検出
       map.current.on('dragstart', () => {
         const storeState = useDeliveryStore.getState();
@@ -65,22 +57,7 @@ function Map({ onOpenSettings }) {
         }
       });
 
-      // GPS位置取得時にストアを更新
-      geolocate.on('geolocate', (e) => {
-        const newLocation = {
-          lat: e.coords.latitude,
-          lng: e.coords.longitude
-        };
-        console.log('🟢 GPS位置取得:', newLocation);
-        setCurrentLocation(newLocation);
-        console.log('🟢 ストア更新完了');
-      });
-
-      geolocate.on('error', (e) => {
-        console.error('🔴 GPS取得エラー:', e);
-      });
-
-      // マップロード後に現在位置を取得と日本語設定
+      // マップロード後に日本語設定
       map.current.on('load', () => {
         // すべてのテキストレイヤーを日本語に設定
         const layers = map.current.getStyle().layers;
@@ -136,8 +113,6 @@ function Map({ onOpenSettings }) {
             ]
           }
         });
-
-        geolocate.trigger();
       });
 
       // 地図クリックでルート検索
@@ -178,6 +153,81 @@ function Map({ onOpenSettings }) {
       console.error('マップ初期化エラー:', error);
     }
   }, []);
+
+  // デバイス方位センサー（コンパス）の初期化
+  useEffect(() => {
+    const requestOrientationPermission = async () => {
+      // iOS 13+ではDeviceOrientationEventのパーミッションが必要
+      if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+        try {
+          const permission = await DeviceOrientationEvent.requestPermission();
+          if (permission === 'granted') {
+            startCompassTracking();
+          } else {
+            console.warn('方位センサーの権限が拒否されました');
+          }
+        } catch (error) {
+          console.error('方位センサー権限エラー:', error);
+        }
+      } else {
+        // Android や iOS 12以下では自動的に開始
+        startCompassTracking();
+      }
+    };
+
+    const startCompassTracking = () => {
+      const handleOrientation = (event) => {
+        // event.alphaは0-360度、北が0度
+        // iOSではwebkitCompassHeadingを使用（利用可能な場合）
+        let heading = null;
+
+        if (event.webkitCompassHeading !== undefined) {
+          // iOS Safari: webkitCompassHeading (0 = 北)
+          heading = event.webkitCompassHeading;
+        } else if (event.alpha !== null) {
+          // Android Chrome: alpha (0 = 北、時計回り）
+          // ただし、alphaは磁北ではなくデバイスの向きなので調整が必要
+          heading = 360 - event.alpha;
+        }
+
+        if (heading !== null) {
+          setCompassHeading(heading);
+        }
+      };
+
+      window.addEventListener('deviceorientationabsolute', handleOrientation, true);
+      window.addEventListener('deviceorientation', handleOrientation, true);
+
+      return () => {
+        window.removeEventListener('deviceorientationabsolute', handleOrientation, true);
+        window.removeEventListener('deviceorientation', handleOrientation, true);
+      };
+    };
+
+    requestOrientationPermission();
+  }, []);
+
+  // 現在位置の変化を監視して速度を計算
+  useEffect(() => {
+    if (!currentLocation) return;
+
+    if (lastPosition.current) {
+      const distance = calculateDistance(lastPosition.current, currentLocation);
+      const timeDiff = (Date.now() - lastPosition.current.timestamp) / 1000; // 秒
+
+      if (timeDiff > 0) {
+        // 速度を計算（m/s）
+        const speed = distance / timeDiff;
+        currentSpeed.current = speed;
+        console.log('📍 現在速度:', (speed * 3.6).toFixed(1), 'km/h');
+      }
+    }
+
+    lastPosition.current = {
+      ...currentLocation,
+      timestamp: Date.now()
+    };
+  }, [currentLocation]);
 
   // ルート検索関数
   const searchRoute = async (origin, destination) => {
@@ -567,7 +617,19 @@ function Map({ onOpenSettings }) {
     // 全体表示モードでは追従しない
     // ユーザーが手動でスワイプした場合は追従しない
     if (map.current && !isOverviewMode && !userInteracted.current) {
-      const bearing = calculateBearing(currentLocation, nextPoint);
+      let bearing;
+
+      // 速度が3 m/s（約10 km/h）以下の場合はコンパスの向き、それ以上は進行方向
+      if (currentSpeed.current < 3 && compassHeading !== null) {
+        // 低速時：コンパスの向きを使用
+        bearing = compassHeading;
+        console.log('🧭 コンパス使用:', bearing.toFixed(0), '度');
+      } else {
+        // 高速時：進行方向を使用
+        bearing = calculateBearing(currentLocation, nextPoint);
+        console.log('🚗 進行方向使用:', bearing.toFixed(0), '度');
+      }
+
       const mapHeight = map.current.getContainer().offsetHeight;
       const topPadding = mapHeight * 0.6; // 上部60%をパディング
       const bottomPadding = 0;
@@ -588,16 +650,18 @@ function Map({ onOpenSettings }) {
     <div className="w-full h-full relative">
       <div ref={mapContainer} className="w-full h-full" />
 
-      {/* 設定アイコン（左上） */}
-      <button
-        onClick={onOpenSettings}
-        className="absolute top-4 left-4 p-3 rounded-full bg-white shadow-lg hover:bg-gray-100 transition-colors z-10"
-      >
-        <svg className="w-6 h-6 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-        </svg>
-      </button>
+      {/* 設定アイコン（右下、ナビ中は非表示） */}
+      {!isNavigating && (
+        <button
+          onClick={onOpenSettings}
+          className="absolute bottom-4 right-4 p-4 rounded-full bg-white shadow-lg hover:bg-gray-100 transition-colors z-10"
+        >
+          <svg className="w-9 h-9 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+          </svg>
+        </button>
+      )}
 
       {/* 現在位置に戻るボタン（ナビ中、スワイプ後のみ表示） */}
       {isNavigating && showRecenterButton && (
