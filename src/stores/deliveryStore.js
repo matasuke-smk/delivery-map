@@ -37,7 +37,8 @@ const useDeliveryStore = create((set, get) => ({
 
   // ナビゲーション開始・終了
   startNavigation: () => set({ isNavigating: true, currentStepIndex: 0 }),
-  stopNavigation: () => set({ isNavigating: false, currentStepIndex: 0, currentRoute: null, destination: null }),
+  stopNavigation: () => set({ isNavigating: false, currentStepIndex: 0 }),
+  clearRoute: () => set({ currentRoute: null, destination: null, isNavigating: false, currentStepIndex: 0 }),
   setCurrentStepIndex: (index) => set({ currentStepIndex: index }),
 
   // 地図角度設定

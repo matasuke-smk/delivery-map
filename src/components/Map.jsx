@@ -27,6 +27,7 @@ function Map({ onOpenSettings, onGeolocateReady }) {
     currentStepIndex,
     startNavigation,
     stopNavigation,
+    clearRoute,
     setCurrentStepIndex,
     setCurrentLocation,
     mapPitch,
@@ -149,36 +150,37 @@ function Map({ onOpenSettings, onGeolocateReady }) {
         });
 
         // 交通標識用のアイコンを作成
-        const createIcon = (text, bgColor) => {
+        const createIcon = (text, bgColor, textColor = '#FFFFFF') => {
           const canvas = document.createElement('canvas');
-          canvas.width = 48;
-          canvas.height = 48;
+          canvas.width = 40;
+          canvas.height = 40;
           const ctx = canvas.getContext('2d');
 
           // 背景円
           ctx.fillStyle = bgColor;
           ctx.beginPath();
-          ctx.arc(24, 24, 22, 0, 2 * Math.PI);
+          ctx.arc(20, 20, 18, 0, 2 * Math.PI);
           ctx.fill();
 
           // 白枠
           ctx.strokeStyle = '#FFFFFF';
-          ctx.lineWidth = 3;
+          ctx.lineWidth = 2;
           ctx.stroke();
 
           // テキスト
-          ctx.font = 'bold 24px sans-serif';
+          ctx.fillStyle = textColor;
+          ctx.font = 'bold 16px sans-serif';
           ctx.textAlign = 'center';
           ctx.textBaseline = 'middle';
-          ctx.fillText(text, 24, 24);
+          ctx.fillText(text, 20, 20);
 
           return canvas;
         };
 
         // アイコンを登録
-        map.current.addImage('traffic-signal-icon', createIcon('🚦', '#FF9800'));
-        map.current.addImage('stop-sign-icon', createIcon('🛑', '#F44336'));
-        map.current.addImage('crossing-icon', createIcon('🚧', '#2196F3'));
+        map.current.addImage('traffic-signal-icon', createIcon('信', '#FF9800'));
+        map.current.addImage('stop-sign-icon', createIcon('止', '#F44336'));
+        map.current.addImage('crossing-icon', createIcon('踏', '#2196F3'));
 
         // 交通標識データ用のソースを追加
         map.current.addSource('traffic-signs', {
@@ -230,25 +232,29 @@ function Map({ onOpenSettings, onGeolocateReady }) {
 
         // Overpass APIから交通標識データを取得
         const fetchTrafficSigns = async () => {
+          if (!map.current) return;
+
           const bounds = map.current.getBounds();
           const bbox = `${bounds.getSouth()},${bounds.getWest()},${bounds.getNorth()},${bounds.getEast()}`;
 
-          const query = `
-            [out:json][bbox:${bbox}];
-            (
-              node["highway"="traffic_signals"];
-              node["highway"="stop"];
-              node["railway"="level_crossing"];
-            );
-            out body;
-          `;
+          const query = `[out:json][bbox:${bbox}];(node["highway"="traffic_signals"];node["highway"="stop"];node["railway"="level_crossing"];);out body;`;
 
           try {
+            console.log('🚦 交通標識データ取得開始');
             const response = await fetch('https://overpass-api.de/api/interpreter', {
               method: 'POST',
-              body: query
+              headers: {
+                'Content-Type': 'application/x-www-form-urlencoded'
+              },
+              body: `data=${encodeURIComponent(query)}`
             });
+
+            if (!response.ok) {
+              throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
             const data = await response.json();
+            console.log(`🚦 交通標識取得完了: ${data.elements.length}件`);
 
             const features = data.elements.map(element => ({
               type: 'Feature',
@@ -262,12 +268,15 @@ function Map({ onOpenSettings, onGeolocateReady }) {
               }
             }));
 
-            map.current.getSource('traffic-signs').setData({
-              type: 'FeatureCollection',
-              features: features
-            });
+            const source = map.current.getSource('traffic-signs');
+            if (source) {
+              source.setData({
+                type: 'FeatureCollection',
+                features: features
+              });
+            }
           } catch (error) {
-            console.error('交通標識データの取得に失敗:', error);
+            console.error('🔴 交通標識データの取得に失敗:', error);
           }
         };
 
@@ -754,11 +763,33 @@ function Map({ onOpenSettings, onGeolocateReady }) {
     lastSpokenStep.current = -1;
     userInteracted.current = false;
     setShowRecenterButton(false);
+  };
+
+  const handleClearRoute = () => {
+    // 音声停止
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+    }
+
+    clearRoute();
+    lastSpokenStep.current = -1;
+    userInteracted.current = false;
+    setShowRecenterButton(false);
 
     // ルートマーカーを削除
     if (map.current && routeMarker.current) {
       routeMarker.current.remove();
       routeMarker.current = null;
+    }
+
+    // ルートレイヤーを削除
+    if (map.current) {
+      if (map.current.getLayer('route')) {
+        map.current.removeLayer('route');
+      }
+      if (map.current.getSource('route')) {
+        map.current.removeSource('route');
+      }
     }
   };
 
@@ -792,12 +823,9 @@ function Map({ onOpenSettings, onGeolocateReady }) {
         }
 
         stopNavigation();
-
-        // ルートマーカーを削除
-        if (map.current && routeMarker.current) {
-          routeMarker.current.remove();
-          routeMarker.current = null;
-        }
+        lastSpokenStep.current = -1;
+        userInteracted.current = false;
+        setShowRecenterButton(false);
       }, 2000);
       return;
     }
@@ -963,6 +991,14 @@ function Map({ onOpenSettings, onGeolocateReady }) {
                 {(currentRoute.distance / 1000).toFixed(1)} km
               </div>
             </div>
+
+            {/* クリアボタン */}
+            <button
+              onClick={handleClearRoute}
+              className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg font-bold hover:bg-gray-300 transition-colors"
+            >
+              クリア
+            </button>
 
             {/* 開始ボタン */}
             <button
