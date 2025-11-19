@@ -190,7 +190,7 @@ function App() {
                           backgroundSize: 'cover',
                           backgroundPosition: 'center'
                         }} />
-                        <span className="text-sm text-gray-600">カスタムアイコン設定済み</span>
+                        <span className="text-sm text-gray-600">設定済み</span>
                       </div>
                       <button
                         onClick={() => setCurrentLocationIcon(null)}
