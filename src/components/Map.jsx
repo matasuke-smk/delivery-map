@@ -337,11 +337,15 @@ function Map({ onOpenSettings }) {
       // 既存の音声を停止
       window.speechSynthesis.cancel();
 
+      // ストアから音量を取得
+      const storeState = useDeliveryStore.getState();
+      const volume = storeState.voiceVolume;
+
       const utterance = new SpeechSynthesisUtterance(text);
       utterance.lang = 'ja-JP';
       utterance.rate = 1.0;
       utterance.pitch = 1.0;
-      utterance.volume = 1.0;
+      utterance.volume = volume;
 
       window.speechSynthesis.speak(utterance);
     }
