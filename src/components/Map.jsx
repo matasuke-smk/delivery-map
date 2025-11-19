@@ -180,9 +180,8 @@ function Map({ onOpenSettings, onGeolocateReady }) {
           return ctx.getImageData(0, 0, size, size);
         };
 
-        // アイコンを登録
+        // アイコンを登録（信号のみ）
         map.current.addImage('traffic-signal-icon', createIcon('信', '#FF9800'), { pixelRatio: 1 });
-        map.current.addImage('crossing-icon', createIcon('踏', '#2196F3'), { pixelRatio: 1 });
 
         // 交通標識データ用のソースを追加
         map.current.addSource('traffic-signs', {
@@ -207,20 +206,6 @@ function Map({ onOpenSettings, onGeolocateReady }) {
           minzoom: 14 // ズームレベル14以上で表示
         });
 
-        // 踏切レイヤー
-        map.current.addLayer({
-          id: 'level-crossings',
-          type: 'symbol',
-          source: 'traffic-signs',
-          filter: ['==', ['get', 'type'], 'level_crossing'],
-          layout: {
-            'icon-image': 'crossing-icon',
-            'icon-size': 0.6,
-            'icon-allow-overlap': true
-          },
-          minzoom: 14 // ズームレベル14以上で表示
-        });
-
         // Overpass APIから交通標識データを取得
         const fetchTrafficSigns = async () => {
           if (!map.current) return;
@@ -228,7 +213,7 @@ function Map({ onOpenSettings, onGeolocateReady }) {
           // ズームレベルが14未満の場合は取得しない
           const zoom = map.current.getZoom();
           if (zoom < 14) {
-            console.log('🚦 ズームレベルが低いため交通標識を非表示');
+            console.log('🚦 ズームレベルが低いため信号を非表示');
             const source = map.current.getSource('traffic-signs');
             if (source) {
               source.setData({ type: 'FeatureCollection', features: [] });
@@ -239,11 +224,11 @@ function Map({ onOpenSettings, onGeolocateReady }) {
           const bounds = map.current.getBounds();
           const bbox = `${bounds.getSouth()},${bounds.getWest()},${bounds.getNorth()},${bounds.getEast()}`;
 
-          // 一時停止は除外（日本ではデータが少ないため）
-          const query = `[out:json][bbox:${bbox}][timeout:10];(node["highway"="traffic_signals"];node["railway"="level_crossing"];);out body 500;`;
+          // 信号機のみ取得
+          const query = `[out:json][bbox:${bbox}][timeout:10];node["highway"="traffic_signals"];out body 500;`;
 
           try {
-            console.log('🚦 交通標識データ取得開始');
+            console.log('🚦 信号データ取得開始');
             const response = await fetch('https://overpass-api.de/api/interpreter', {
               method: 'POST',
               headers: {
@@ -257,7 +242,7 @@ function Map({ onOpenSettings, onGeolocateReady }) {
             }
 
             const data = await response.json();
-            console.log(`🚦 交通標識取得完了: ${data.elements.length}件`);
+            console.log(`🚦 信号取得完了: ${data.elements.length}件`);
 
             const features = data.elements.map(element => ({
               type: 'Feature',
@@ -266,7 +251,7 @@ function Map({ onOpenSettings, onGeolocateReady }) {
                 coordinates: [element.lon, element.lat]
               },
               properties: {
-                type: element.tags.highway === 'traffic_signals' ? 'traffic_signals' : 'level_crossing'
+                type: 'traffic_signals'
               }
             }));
 
@@ -278,7 +263,7 @@ function Map({ onOpenSettings, onGeolocateReady }) {
               });
             }
           } catch (error) {
-            console.error('🔴 交通標識データの取得に失敗:', error);
+            console.error('🔴 信号データの取得に失敗:', error);
           }
         };
 
