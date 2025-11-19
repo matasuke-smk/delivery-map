@@ -66,17 +66,13 @@ function Map() {
         const layers = map.current.getStyle().layers;
         layers.forEach((layer) => {
           if (layer.layout && layer.layout['text-field']) {
-            // 道路番号を含むレイヤーの場合
+            // 道路番号を含むレイヤーの場合は番号のみ表示
             if (layer.id.includes('road') || layer.id.includes('highway') || layer.id.includes('shield')) {
+              const refValue = ['get', 'ref'];
               map.current.setLayoutProperty(
                 layer.id,
                 'text-field',
-                [
-                  'format',
-                  ['coalesce', ['get', 'ref'], ''], {},
-                  '\n', {},
-                  ['coalesce', ['get', 'name_ja'], ['get', 'name_en'], ['get', 'name'], ''], {}
-                ]
+                ['case', ['has', 'ref'], refValue, ['coalesce', ['get', 'name_ja'], ['get', 'name_en'], ['get', 'name']]]
               );
             } else {
               // 他のレイヤーは日本語名のみ
