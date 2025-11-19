@@ -16,3 +16,8 @@
   margin-right: 10px;
   margin-bottom: 10px;
 }
+
+/* GeolocateControlを非表示（位置取得機能は動作、ボタンのみ非表示） */
+.mapboxgl-ctrl-top-right .mapboxgl-ctrl-geolocate {
+  display: none;
+}

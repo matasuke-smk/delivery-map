@@ -51,6 +51,32 @@ function Map({ onOpenSettings }) {
       const navControl = new mapboxgl.NavigationControl();
       map.current.addControl(navControl, 'bottom-right');
 
+      // 位置情報取得コントロール（マーカーは非表示、位置取得のみ）
+      const geolocate = new mapboxgl.GeolocateControl({
+        positionOptions: {
+          enableHighAccuracy: true
+        },
+        trackUserLocation: true,
+        showUserLocation: false, // デフォルトマーカーを非表示
+        showUserHeading: false
+      });
+
+      map.current.addControl(geolocate, 'top-right');
+
+      // GPS位置取得時にストアを更新
+      geolocate.on('geolocate', (e) => {
+        const newLocation = {
+          lat: e.coords.latitude,
+          lng: e.coords.longitude
+        };
+        console.log('🟢 GPS位置取得:', newLocation);
+        setCurrentLocation(newLocation);
+      });
+
+      geolocate.on('error', (e) => {
+        console.error('🔴 GPS取得エラー:', e);
+      });
+
       // ユーザーのドラッグ操作を検出
       map.current.on('dragstart', () => {
         const storeState = useDeliveryStore.getState();
@@ -116,6 +142,9 @@ function Map({ onOpenSettings }) {
             ]
           }
         });
+
+        // 位置情報取得を開始
+        geolocate.trigger();
       });
 
       // 地図クリックでルート検索
