@@ -29,10 +29,12 @@ function Map({ onOpenSettings }) {
     stopNavigation,
     setCurrentStepIndex,
     setCurrentLocation,
-    mapPitch
+    mapPitch,
+    currentLocationIcon
   } = useDeliveryStore();
   const routeMarker = useRef(null);
   const lastSpokenStep = useRef(-1);
+  const currentLocationMarker = useRef(null);
 
   useEffect(() => {
     if (map.current) return;
@@ -45,8 +47,9 @@ function Map({ onOpenSettings }) {
         zoom: 12
       });
 
-      // コントロール追加
-      map.current.addControl(new mapboxgl.NavigationControl(), 'top-right');
+      // コントロール追加（右下に配置）
+      const navControl = new mapboxgl.NavigationControl();
+      map.current.addControl(navControl, 'bottom-right');
 
       // ユーザーのドラッグ操作を検出
       map.current.on('dragstart', () => {
@@ -228,6 +231,51 @@ function Map({ onOpenSettings }) {
       timestamp: Date.now()
     };
   }, [currentLocation]);
+
+  // 現在位置マーカーを表示・更新
+  useEffect(() => {
+    if (!map.current || !currentLocation) return;
+
+    if (currentLocationMarker.current) {
+      // 既存のマーカーを更新
+      currentLocationMarker.current.setLngLat([currentLocation.lng, currentLocation.lat]);
+
+      // アイコンが変更された場合、マーカーを再作成
+      const el = currentLocationMarker.current.getElement();
+      if (currentLocationIcon) {
+        el.style.backgroundImage = `url(${currentLocationIcon})`;
+        el.style.backgroundSize = 'cover';
+        el.style.backgroundPosition = 'center';
+        el.style.backgroundColor = 'transparent';
+      } else {
+        el.style.backgroundImage = '';
+        el.style.backgroundColor = '#4285F4';
+      }
+    } else {
+      // 新しいマーカーを作成
+      const el = document.createElement('div');
+      el.className = 'current-location-marker';
+      el.style.width = '40px';
+      el.style.height = '40px';
+      el.style.borderRadius = '50%';
+      el.style.border = '4px solid white';
+      el.style.boxShadow = '0 0 10px rgba(0, 0, 0, 0.3)';
+
+      // カスタムアイコンが設定されている場合
+      if (currentLocationIcon) {
+        el.style.backgroundImage = `url(${currentLocationIcon})`;
+        el.style.backgroundSize = 'cover';
+        el.style.backgroundPosition = 'center';
+      } else {
+        // デフォルトは青い円
+        el.style.backgroundColor = '#4285F4';
+      }
+
+      currentLocationMarker.current = new mapboxgl.Marker(el)
+        .setLngLat([currentLocation.lng, currentLocation.lat])
+        .addTo(map.current);
+    }
+  }, [currentLocation, currentLocationIcon]);
 
   // ルート検索関数
   const searchRoute = async (origin, destination) => {
@@ -650,26 +698,24 @@ function Map({ onOpenSettings }) {
     <div className="w-full h-full relative">
       <div ref={mapContainer} className="w-full h-full" />
 
-      {/* 設定アイコン（右下、ナビ中は非表示） */}
-      {!isNavigating && (
-        <button
-          onClick={onOpenSettings}
-          className="absolute bottom-4 right-4 p-4 rounded-full bg-white shadow-lg hover:bg-gray-100 transition-colors z-10"
-        >
-          <svg className="w-9 h-9 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-          </svg>
-        </button>
-      )}
+      {/* 設定アイコン（左上） */}
+      <button
+        onClick={onOpenSettings}
+        className="absolute top-4 left-4 p-3 rounded-full bg-white shadow-lg hover:bg-gray-100 transition-colors z-10"
+      >
+        <svg className="w-6 h-6 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+        </svg>
+      </button>
 
       {/* 現在位置に戻るボタン（ナビ中、スワイプ後のみ表示） */}
       {isNavigating && showRecenterButton && (
         <button
           onClick={handleRecenter}
-          className="absolute bottom-24 right-4 p-4 rounded-full bg-blue-500 text-white shadow-lg hover:bg-blue-600 transition-all z-10 animate-bounce"
+          className="absolute bottom-24 left-4 p-5 rounded-full bg-blue-500 text-white shadow-lg hover:bg-blue-600 transition-all z-10 animate-bounce"
         >
-          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
           </svg>

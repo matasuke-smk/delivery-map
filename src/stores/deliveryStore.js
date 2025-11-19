@@ -15,6 +15,7 @@ const useDeliveryStore = create((set, get) => ({
   currentStepIndex: 0,
   mapPitch: 60, // 地図の角度（0-85度）
   voiceVolume: 1.0, // 音声音量（0.0-1.0）
+  currentLocationIcon: null, // 現在位置のカスタムアイコン（画像URL）
 
   // 位置更新
   setCurrentLocation: (location) => set({ currentLocation: location }),
@@ -44,6 +45,9 @@ const useDeliveryStore = create((set, get) => ({
 
   // 音声音量設定
   setVoiceVolume: (volume) => set({ voiceVolume: volume }),
+
+  // 現在位置アイコン設定
+  setCurrentLocationIcon: (iconUrl) => set({ currentLocationIcon: iconUrl }),
 
   // 店舗管理
   addOrUpdateStore: async (location) => {

@@ -8,3 +8,11 @@
   cursor: pointer;
   box-shadow: 0 2px 4px rgba(0,0,0,0.2);
 }
+
+/* NavigationControlを1.5倍に拡大 */
+.mapboxgl-ctrl-bottom-right .mapboxgl-ctrl-group {
+  transform: scale(1.5);
+  transform-origin: bottom right;
+  margin-right: 10px;
+  margin-bottom: 10px;
+}

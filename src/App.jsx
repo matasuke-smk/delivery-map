@@ -4,7 +4,7 @@ import useDeliveryStore from './stores/deliveryStore';
 import locationTracker from './services/locationTracker';
 
 function App() {
-  const { loadData, showTraffic, toggleTraffic, useTollRoads, toggleTollRoads, mapPitch, setMapPitch, voiceVolume, setVoiceVolume } = useDeliveryStore();
+  const { loadData, showTraffic, toggleTraffic, useTollRoads, toggleTollRoads, mapPitch, setMapPitch, voiceVolume, setVoiceVolume, currentLocationIcon, setCurrentLocationIcon } = useDeliveryStore();
   const [isLoading, setIsLoading] = useState(true);
   const [showSettings, setShowSettings] = useState(false);
 
@@ -147,6 +147,46 @@ function App() {
                 </div>
                 <div className="text-center mt-2">
                   <span className="text-lg font-bold text-purple-600">{Math.round(voiceVolume * 100)}%</span>
+                </div>
+              </div>
+
+              {/* 現在位置アイコン */}
+              <div className="p-4 bg-gray-50 rounded-lg">
+                <div className="mb-3">
+                  <div className="font-semibold text-gray-900">現在位置アイコン</div>
+                  <div className="text-sm text-gray-500">地図上の現在位置マーカーの画像を変更</div>
+                </div>
+                <div className="flex items-center gap-3">
+                  {currentLocationIcon && (
+                    <div className="w-12 h-12 rounded-full border-2 border-white shadow-md" style={{
+                      backgroundImage: `url(${currentLocationIcon})`,
+                      backgroundSize: 'cover',
+                      backgroundPosition: 'center'
+                    }} />
+                  )}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => {
+                      const file = e.target.files[0];
+                      if (file) {
+                        const reader = new FileReader();
+                        reader.onloadend = () => {
+                          setCurrentLocationIcon(reader.result);
+                        };
+                        reader.readAsDataURL(file);
+                      }
+                    }}
+                    className="flex-1 text-sm text-gray-700"
+                  />
+                  {currentLocationIcon && (
+                    <button
+                      onClick={() => setCurrentLocationIcon(null)}
+                      className="px-3 py-1 bg-red-500 text-white text-sm rounded hover:bg-red-600"
+                    >
+                      リセット
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
