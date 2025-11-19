@@ -351,7 +351,7 @@ function Map({ onOpenSettings }) {
 
         // 画面の高さを取得してpaddingを計算（現在位置が下から1/5の位置）
         const mapHeight = map.current.getContainer().offsetHeight;
-        const bottomPadding = mapHeight * 0.8; // 下部80%をパディング（現在位置が下から1/5）
+        const bottomPadding = mapHeight * 0.2; // 下部20%をパディング（現在位置が下から1/5）
 
         // 最大ズーム-5
         const maxZoom = map.current.getMaxZoom();
@@ -382,7 +382,7 @@ function Map({ onOpenSettings }) {
       };
       const bearing = calculateBearing(currentLocation, nextPoint);
       const mapHeight = map.current.getContainer().offsetHeight;
-      const bottomPadding = mapHeight * 0.8; // 下から1/5の位置
+      const bottomPadding = mapHeight * 0.2; // 下から1/5の位置
 
       // 最大ズーム-5
       const maxZoom = map.current.getMaxZoom();
@@ -516,7 +516,7 @@ function Map({ onOpenSettings }) {
     if (map.current && !isOverviewMode) {
       const bearing = calculateBearing(currentLocation, nextPoint);
       const mapHeight = map.current.getContainer().offsetHeight;
-      const bottomPadding = mapHeight * 0.8; // 下から1/5の位置
+      const bottomPadding = mapHeight * 0.2; // 下から1/5の位置
 
       map.current.easeTo({
         center: [currentLocation.lng, currentLocation.lat],
