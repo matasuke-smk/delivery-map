@@ -351,18 +351,21 @@ function Map({ onOpenSettings }) {
 
         // 画面の高さを取得してpaddingを計算（現在位置が下から1/5の位置）
         const mapHeight = map.current.getContainer().offsetHeight;
-        const bottomPadding = mapHeight * 0.2; // 下部20%をパディング（現在位置が下から1/5）
+        const topPadding = mapHeight * 0.6; // 上部60%をパディング
+        const bottomPadding = 0; // 下部パディングなし
 
         // 最大ズーム-5
         const maxZoom = map.current.getMaxZoom();
         const targetZoom = maxZoom - 5;
+
+        console.log('ナビ開始 - ズーム:', targetZoom, 'padding:', { top: topPadding, bottom: bottomPadding });
 
         map.current.flyTo({
           center: [currentLocation.lng, currentLocation.lat],
           zoom: targetZoom,
           pitch: 60,
           bearing: bearing,
-          padding: { top: 0, bottom: bottomPadding, left: 0, right: 0 },
+          padding: { top: topPadding, bottom: bottomPadding, left: 0, right: 0 },
           duration: 2000
         });
       }
@@ -382,7 +385,8 @@ function Map({ onOpenSettings }) {
       };
       const bearing = calculateBearing(currentLocation, nextPoint);
       const mapHeight = map.current.getContainer().offsetHeight;
-      const bottomPadding = mapHeight * 0.2; // 下から1/5の位置
+      const topPadding = mapHeight * 0.6; // 上部60%をパディング
+      const bottomPadding = 0;
 
       // 最大ズーム-5
       const maxZoom = map.current.getMaxZoom();
@@ -393,7 +397,7 @@ function Map({ onOpenSettings }) {
         zoom: targetZoom,
         pitch: 60,
         bearing: bearing,
-        padding: { top: 0, bottom: bottomPadding, left: 0, right: 0 },
+        padding: { top: topPadding, bottom: bottomPadding, left: 0, right: 0 },
         duration: 1000
       });
       setIsOverviewMode(false);
@@ -516,12 +520,13 @@ function Map({ onOpenSettings }) {
     if (map.current && !isOverviewMode) {
       const bearing = calculateBearing(currentLocation, nextPoint);
       const mapHeight = map.current.getContainer().offsetHeight;
-      const bottomPadding = mapHeight * 0.2; // 下から1/5の位置
+      const topPadding = mapHeight * 0.6; // 上部60%をパディング
+      const bottomPadding = 0;
 
       map.current.easeTo({
         center: [currentLocation.lng, currentLocation.lat],
         bearing: bearing,
-        padding: { top: 0, bottom: bottomPadding, left: 0, right: 0 },
+        padding: { top: topPadding, bottom: bottomPadding, left: 0, right: 0 },
         duration: 1000,
         easing: (t) => t // リニア補間でスムーズに
       });
