@@ -349,16 +349,16 @@ function Map({ onOpenSettings }) {
         };
         const bearing = calculateBearing(currentLocation, nextPoint);
 
-        // 画面の高さを取得してpaddingを計算
+        // 画面の高さを取得してpaddingを計算（現在位置が下から2/5の位置）
         const mapHeight = map.current.getContainer().offsetHeight;
-        const topPadding = mapHeight * 0.6; // 現在位置が下から2/5 = 上から3/5
+        const bottomPadding = mapHeight * 0.4; // 下部40%をパディング
 
         map.current.flyTo({
           center: [currentLocation.lng, currentLocation.lat],
           zoom: 17,
           pitch: 60,
           bearing: bearing,
-          padding: { top: topPadding, bottom: 0, left: 0, right: 0 },
+          padding: { top: 0, bottom: bottomPadding, left: 0, right: 0 },
           duration: 2000
         });
       }
@@ -378,14 +378,14 @@ function Map({ onOpenSettings }) {
       };
       const bearing = calculateBearing(currentLocation, nextPoint);
       const mapHeight = map.current.getContainer().offsetHeight;
-      const topPadding = mapHeight * 0.6;
+      const bottomPadding = mapHeight * 0.4;
 
       map.current.flyTo({
         center: [currentLocation.lng, currentLocation.lat],
         zoom: 17,
         pitch: 60,
         bearing: bearing,
-        padding: { top: topPadding, bottom: 0, left: 0, right: 0 },
+        padding: { top: 0, bottom: bottomPadding, left: 0, right: 0 },
         duration: 1000
       });
       setIsOverviewMode(false);
@@ -508,12 +508,12 @@ function Map({ onOpenSettings }) {
     if (map.current && !isOverviewMode) {
       const bearing = calculateBearing(currentLocation, nextPoint);
       const mapHeight = map.current.getContainer().offsetHeight;
-      const topPadding = mapHeight * 0.6;
+      const bottomPadding = mapHeight * 0.4;
 
       map.current.easeTo({
         center: [currentLocation.lng, currentLocation.lat],
         bearing: bearing,
-        padding: { top: topPadding, bottom: 0, left: 0, right: 0 },
+        padding: { top: 0, bottom: bottomPadding, left: 0, right: 0 },
         duration: 1000,
         easing: (t) => t // リニア補間でスムーズに
       });
