@@ -535,19 +535,9 @@ function Map({ onOpenSettings }) {
         </svg>
       </button>
 
-      {/* ナビ終了ボタン（左上、ナビ中のみ） */}
-      {isNavigating && (
-        <button
-          onClick={handleStopNavigation}
-          className="absolute top-4 left-20 px-4 py-3 rounded-full bg-red-500 text-white shadow-lg hover:bg-red-600 transition-colors z-10 font-bold"
-        >
-          終了
-        </button>
-      )}
-
       {/* ナビゲーション中のUI（画面下） */}
       {isNavigating && currentRoute && currentLocation && (
-        <div className="absolute bottom-0 left-0 right-0" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
+        <div className="absolute bottom-0 left-0 right-0 z-20" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
           {(() => {
             const steps = currentRoute.legs[0].steps;
             const currentStep = steps[currentStepIndex];
@@ -565,28 +555,39 @@ function Map({ onOpenSettings }) {
             }
 
             return (
-              <>
-                {/* 残り距離と到着予定時間（タップで全体表示切り替え） */}
+              <div className="bg-white shadow-lg">
                 <div
                   onClick={toggleOverviewMode}
-                  className="bg-white shadow-lg p-4 cursor-pointer active:bg-gray-50 transition-colors"
+                  className="flex items-center gap-2 px-4 py-3 cursor-pointer active:bg-gray-50 transition-colors"
                 >
-                  <div className="flex gap-4">
-                    <div className="flex-1 text-center">
-                      <div className="text-sm text-gray-600 mb-1">残り距離</div>
-                      <div className="text-2xl font-bold text-blue-600">
-                        {(remainingDistance / 1000).toFixed(1)} km
-                      </div>
+                  {/* 残り距離 */}
+                  <div className="flex-1 text-center">
+                    <div className="text-xs text-gray-500 mb-1">残り距離</div>
+                    <div className="text-lg font-bold text-blue-600">
+                      {(remainingDistance / 1000).toFixed(1)} km
                     </div>
-                    <div className="flex-1 text-center">
-                      <div className="text-sm text-gray-600 mb-1">到着予定</div>
-                      <div className="text-2xl font-bold text-green-600">
-                        {new Date(Date.now() + remainingDuration * 1000).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })}
-                      </div>
+                  </div>
+
+                  {/* 終了ボタン */}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleStopNavigation();
+                    }}
+                    className="px-6 py-2 bg-red-500 text-white rounded-lg font-bold hover:bg-red-600 transition-colors"
+                  >
+                    終了
+                  </button>
+
+                  {/* 到着予定 */}
+                  <div className="flex-1 text-center">
+                    <div className="text-xs text-gray-500 mb-1">到着予定</div>
+                    <div className="text-lg font-bold text-green-600">
+                      {new Date(Date.now() + remainingDuration * 1000).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })}
                     </div>
                   </div>
                 </div>
-              </>
+              </div>
             );
           })()}
         </div>
@@ -594,30 +595,32 @@ function Map({ onOpenSettings }) {
 
       {/* ルート情報（ナビ開始前） */}
       {!isNavigating && currentRoute && (
-        <div className="absolute bottom-0 left-0 right-0 bg-white shadow-lg border-t border-gray-200 p-4" style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom))' }}>
-          {/* 距離と時間 */}
-          <div className="flex gap-4 mb-3">
-            <div className="flex-1 bg-blue-50 rounded-lg p-3">
-              <div className="text-xs text-gray-600 mb-1">距離</div>
-              <div className="text-xl font-bold text-blue-600">
+        <div className="absolute bottom-0 left-0 right-0 bg-white shadow-lg border-t border-gray-200 z-20" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
+          <div className="flex items-center gap-2 px-4 py-3">
+            {/* 距離 */}
+            <div className="flex-1 text-center">
+              <div className="text-xs text-gray-500 mb-1">距離</div>
+              <div className="text-lg font-bold text-blue-600">
                 {(currentRoute.distance / 1000).toFixed(1)} km
               </div>
             </div>
-            <div className="flex-1 bg-green-50 rounded-lg p-3">
-              <div className="text-xs text-gray-600 mb-1">所要時間</div>
-              <div className="text-xl font-bold text-green-600">
+
+            {/* 開始ボタン */}
+            <button
+              onClick={handleStartNavigation}
+              className="px-6 py-2 bg-black text-white rounded-lg font-bold hover:bg-gray-800 transition-colors"
+            >
+              開始
+            </button>
+
+            {/* 所要時間 */}
+            <div className="flex-1 text-center">
+              <div className="text-xs text-gray-500 mb-1">所要時間</div>
+              <div className="text-lg font-bold text-green-600">
                 {Math.round(currentRoute.duration / 60)} 分
               </div>
             </div>
           </div>
-
-          {/* 開始ボタン */}
-          <button
-            onClick={handleStartNavigation}
-            className="w-full bg-black text-white py-3 rounded-lg font-bold text-lg hover:bg-gray-800 transition-colors"
-          >
-            ナビ開始
-          </button>
         </div>
       )}
     </div>
