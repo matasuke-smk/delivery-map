@@ -152,36 +152,38 @@ function Map({ onOpenSettings, onGeolocateReady }) {
 
         // 交通標識用のアイコンを作成
         const createIcon = (text, bgColor, textColor = '#FFFFFF') => {
+          const size = 48; // サイズを48x48に統一
           const canvas = document.createElement('canvas');
-          canvas.width = 40;
-          canvas.height = 40;
+          canvas.width = size;
+          canvas.height = size;
           const ctx = canvas.getContext('2d');
 
           // 背景円
           ctx.fillStyle = bgColor;
           ctx.beginPath();
-          ctx.arc(20, 20, 18, 0, 2 * Math.PI);
+          ctx.arc(size / 2, size / 2, size / 2 - 4, 0, 2 * Math.PI);
           ctx.fill();
 
           // 白枠
           ctx.strokeStyle = '#FFFFFF';
-          ctx.lineWidth = 2;
+          ctx.lineWidth = 3;
           ctx.stroke();
 
           // テキスト
           ctx.fillStyle = textColor;
-          ctx.font = 'bold 16px sans-serif';
+          ctx.font = 'bold 20px sans-serif';
           ctx.textAlign = 'center';
           ctx.textBaseline = 'middle';
-          ctx.fillText(text, 20, 20);
+          ctx.fillText(text, size / 2, size / 2);
 
-          return canvas;
+          // CanvasをImageDataに変換
+          return ctx.getImageData(0, 0, size, size);
         };
 
         // アイコンを登録
-        map.current.addImage('traffic-signal-icon', createIcon('信', '#FF9800'));
-        map.current.addImage('stop-sign-icon', createIcon('止', '#F44336'));
-        map.current.addImage('crossing-icon', createIcon('踏', '#2196F3'));
+        map.current.addImage('traffic-signal-icon', createIcon('信', '#FF9800'), { pixelRatio: 1 });
+        map.current.addImage('stop-sign-icon', createIcon('止', '#F44336'), { pixelRatio: 1 });
+        map.current.addImage('crossing-icon', createIcon('踏', '#2196F3'), { pixelRatio: 1 });
 
         // 交通標識データ用のソースを追加
         map.current.addSource('traffic-signs', {
