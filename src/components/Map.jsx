@@ -147,6 +147,9 @@ function Map({ onOpenSettings, onGeolocateReady }) {
             ]
           }
         });
+
+        // デフォルトで位置情報を取得
+        geolocate.trigger();
       });
 
       // 地図クリックでルート検索
