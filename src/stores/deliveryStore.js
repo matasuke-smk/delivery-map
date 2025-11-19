@@ -11,6 +11,8 @@ const useDeliveryStore = create((set, get) => ({
   destination: null,
   showTraffic: false,
   useTollRoads: false,
+  isNavigating: false,
+  currentStepIndex: 0,
 
   // 位置更新
   setCurrentLocation: (location) => set({ currentLocation: location }),
@@ -29,6 +31,11 @@ const useDeliveryStore = create((set, get) => ({
 
   // 有料道路使用切り替え
   toggleTollRoads: () => set((state) => ({ useTollRoads: !state.useTollRoads })),
+
+  // ナビゲーション開始・終了
+  startNavigation: () => set({ isNavigating: true, currentStepIndex: 0 }),
+  stopNavigation: () => set({ isNavigating: false, currentStepIndex: 0, currentRoute: null, destination: null }),
+  setCurrentStepIndex: (index) => set({ currentStepIndex: index }),
 
   // 店舗管理
   addOrUpdateStore: async (location) => {

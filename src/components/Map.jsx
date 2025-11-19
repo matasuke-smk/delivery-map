@@ -17,6 +17,11 @@ function Map() {
     setDestination,
     showTraffic,
     useTollRoads,
+    isNavigating,
+    currentStepIndex,
+    startNavigation,
+    stopNavigation,
+    setCurrentStepIndex,
     setCurrentLocation
   } = useDeliveryStore();
   const routeMarker = useRef(null);
@@ -278,20 +283,164 @@ function Map() {
     });
   }, [stores]);
 
+  // 2点間の距離を計算（メートル）
+  const calculateDistance = (point1, point2) => {
+    const R = 6371e3; // 地球の半径（メートル）
+    const φ1 = point1.lat * Math.PI / 180;
+    const φ2 = point2.lat * Math.PI / 180;
+    const Δφ = (point2.lat - point1.lat) * Math.PI / 180;
+    const Δλ = (point2.lng - point1.lng) * Math.PI / 180;
+
+    const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+              Math.cos(φ1) * Math.cos(φ2) *
+              Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+    return R * c;
+  };
+
   const handleStartNavigation = () => {
     if (currentRoute && destination) {
-      // Google Mapsで開く
-      const url = `https://www.google.com/maps/dir/?api=1&origin=${currentLocation.lat},${currentLocation.lng}&destination=${destination.lat},${destination.lng}&travelmode=driving`;
-      window.open(url, '_blank');
+      startNavigation();
+      // カメラを現在位置中心に
+      if (map.current && currentLocation) {
+        map.current.flyTo({
+          center: [currentLocation.lng, currentLocation.lat],
+          zoom: 16,
+          pitch: 60,
+          bearing: 0
+        });
+      }
     }
   };
+
+  const handleStopNavigation = () => {
+    stopNavigation();
+    // カメラをリセット
+    if (map.current && routeMarker.current) {
+      routeMarker.current.remove();
+      routeMarker.current = null;
+    }
+    if (map.current && map.current.getSource('route')) {
+      map.current.removeLayer('route');
+      map.current.removeSource('route');
+    }
+  };
+
+  // ナビゲーション中の位置追跡
+  useEffect(() => {
+    if (!isNavigating || !currentRoute || !currentLocation) return;
+
+    const steps = currentRoute.legs[0].steps;
+    if (currentStepIndex >= steps.length) {
+      // 到着
+      alert('目的地に到着しました！');
+      stopNavigation();
+      return;
+    }
+
+    const currentStep = steps[currentStepIndex];
+    const nextPoint = {
+      lat: currentStep.maneuver.location[1],
+      lng: currentStep.maneuver.location[0]
+    };
+
+    const distance = calculateDistance(currentLocation, nextPoint);
+
+    // 次のステップまで30m以内なら次へ
+    if (distance < 30 && currentStepIndex < steps.length - 1) {
+      setCurrentStepIndex(currentStepIndex + 1);
+    }
+
+    // カメラを現在位置追従
+    if (map.current) {
+      map.current.easeTo({
+        center: [currentLocation.lng, currentLocation.lat],
+        duration: 1000
+      });
+    }
+  }, [currentLocation, isNavigating, currentStepIndex]);
 
   return (
     <div className="w-full h-full relative">
       <div ref={mapContainer} className="w-full h-full" />
 
-      {/* ルート情報 */}
-      {currentRoute && (
+      {/* ナビゲーション中のUI */}
+      {isNavigating && currentRoute && currentLocation && (
+        <div className="absolute top-0 left-0 right-0 bg-white shadow-lg p-4">
+          {(() => {
+            const steps = currentRoute.legs[0].steps;
+            const currentStep = steps[currentStepIndex];
+            const nextPoint = {
+              lat: currentStep.maneuver.location[1],
+              lng: currentStep.maneuver.location[0]
+            };
+            const distanceToNext = calculateDistance(currentLocation, nextPoint);
+
+            // 残りの総距離を計算
+            let remainingDistance = 0;
+            for (let i = currentStepIndex; i < steps.length; i++) {
+              remainingDistance += steps[i].distance;
+            }
+
+            // 方向アイコンの取得
+            const getDirectionIcon = (type) => {
+              const icons = {
+                'turn-right': '➡️',
+                'turn-left': '⬅️',
+                'sharp-right': '↗️',
+                'sharp-left': '↖️',
+                'slight-right': '↗️',
+                'slight-left': '↖️',
+                'straight': '⬆️',
+                'uturn': '🔃',
+                'arrive': '🏁'
+              };
+              return icons[type] || '⬆️';
+            };
+
+            return (
+              <>
+                {/* 次の案内 */}
+                <div className="bg-blue-600 text-white p-4 rounded-lg mb-3">
+                  <div className="flex items-center gap-3">
+                    <div className="text-4xl">{getDirectionIcon(currentStep.maneuver.type)}</div>
+                    <div className="flex-1">
+                      <div className="text-sm opacity-80">あと {distanceToNext < 1000 ? `${Math.round(distanceToNext)}m` : `${(distanceToNext / 1000).toFixed(1)}km`}</div>
+                      <div className="text-lg font-bold">{currentStep.maneuver.instruction}</div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 残り距離と時間 */}
+                <div className="flex gap-3 mb-3">
+                  <div className="flex-1 bg-gray-50 rounded-lg p-2 text-center">
+                    <div className="text-xs text-gray-600">残り距離</div>
+                    <div className="text-lg font-bold">{(remainingDistance / 1000).toFixed(1)} km</div>
+                  </div>
+                  <div className="flex-1 bg-gray-50 rounded-lg p-2 text-center">
+                    <div className="text-xs text-gray-600">到着予定</div>
+                    <div className="text-lg font-bold">
+                      {new Date(Date.now() + currentRoute.duration * 1000).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })}
+                    </div>
+                  </div>
+                </div>
+
+                {/* 終了ボタン */}
+                <button
+                  onClick={handleStopNavigation}
+                  className="w-full bg-red-500 text-white py-2 rounded-lg font-bold hover:bg-red-600 transition-colors"
+                >
+                  ナビ終了
+                </button>
+              </>
+            );
+          })()}
+        </div>
+      )}
+
+      {/* ルート情報（ナビ開始前） */}
+      {!isNavigating && currentRoute && (
         <div className="absolute bottom-0 left-0 right-0 bg-white shadow-lg border-t border-gray-200 p-4" style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom))' }}>
           {/* 距離と時間 */}
           <div className="flex gap-4 mb-3">
