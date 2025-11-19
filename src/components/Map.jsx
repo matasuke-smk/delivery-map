@@ -148,6 +148,139 @@ function Map({ onOpenSettings, onGeolocateReady }) {
           }
         });
 
+        // 交通標識用のアイコンを作成
+        const createIcon = (text, bgColor) => {
+          const canvas = document.createElement('canvas');
+          canvas.width = 48;
+          canvas.height = 48;
+          const ctx = canvas.getContext('2d');
+
+          // 背景円
+          ctx.fillStyle = bgColor;
+          ctx.beginPath();
+          ctx.arc(24, 24, 22, 0, 2 * Math.PI);
+          ctx.fill();
+
+          // 白枠
+          ctx.strokeStyle = '#FFFFFF';
+          ctx.lineWidth = 3;
+          ctx.stroke();
+
+          // テキスト
+          ctx.font = 'bold 24px sans-serif';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(text, 24, 24);
+
+          return canvas;
+        };
+
+        // アイコンを登録
+        map.current.addImage('traffic-signal-icon', createIcon('🚦', '#FF9800'));
+        map.current.addImage('stop-sign-icon', createIcon('🛑', '#F44336'));
+        map.current.addImage('crossing-icon', createIcon('🚧', '#2196F3'));
+
+        // 交通標識データ用のソースを追加
+        map.current.addSource('traffic-signs', {
+          type: 'geojson',
+          data: {
+            type: 'FeatureCollection',
+            features: []
+          }
+        });
+
+        // 信号機レイヤー
+        map.current.addLayer({
+          id: 'traffic-signals',
+          type: 'symbol',
+          source: 'traffic-signs',
+          filter: ['==', ['get', 'type'], 'traffic_signals'],
+          layout: {
+            'icon-image': 'traffic-signal-icon',
+            'icon-size': 0.7,
+            'icon-allow-overlap': true
+          }
+        });
+
+        // 一時停止レイヤー
+        map.current.addLayer({
+          id: 'stop-signs',
+          type: 'symbol',
+          source: 'traffic-signs',
+          filter: ['==', ['get', 'type'], 'stop'],
+          layout: {
+            'icon-image': 'stop-sign-icon',
+            'icon-size': 0.7,
+            'icon-allow-overlap': true
+          }
+        });
+
+        // 踏切レイヤー
+        map.current.addLayer({
+          id: 'level-crossings',
+          type: 'symbol',
+          source: 'traffic-signs',
+          filter: ['==', ['get', 'type'], 'level_crossing'],
+          layout: {
+            'icon-image': 'crossing-icon',
+            'icon-size': 0.7,
+            'icon-allow-overlap': true
+          }
+        });
+
+        // Overpass APIから交通標識データを取得
+        const fetchTrafficSigns = async () => {
+          const bounds = map.current.getBounds();
+          const bbox = `${bounds.getSouth()},${bounds.getWest()},${bounds.getNorth()},${bounds.getEast()}`;
+
+          const query = `
+            [out:json][bbox:${bbox}];
+            (
+              node["highway"="traffic_signals"];
+              node["highway"="stop"];
+              node["railway"="level_crossing"];
+            );
+            out body;
+          `;
+
+          try {
+            const response = await fetch('https://overpass-api.de/api/interpreter', {
+              method: 'POST',
+              body: query
+            });
+            const data = await response.json();
+
+            const features = data.elements.map(element => ({
+              type: 'Feature',
+              geometry: {
+                type: 'Point',
+                coordinates: [element.lon, element.lat]
+              },
+              properties: {
+                type: element.tags.highway === 'traffic_signals' ? 'traffic_signals' :
+                      element.tags.highway === 'stop' ? 'stop' : 'level_crossing'
+              }
+            }));
+
+            map.current.getSource('traffic-signs').setData({
+              type: 'FeatureCollection',
+              features: features
+            });
+          } catch (error) {
+            console.error('交通標識データの取得に失敗:', error);
+          }
+        };
+
+        // 初回読み込み
+        fetchTrafficSigns();
+
+        // 地図移動時に更新（デバウンス付き）
+        let fetchTimeout;
+        map.current.on('moveend', () => {
+          clearTimeout(fetchTimeout);
+          fetchTimeout = setTimeout(fetchTrafficSigns, 500);
+        });
+
         // デフォルトで位置情報を取得
         geolocate.trigger();
       });
