@@ -16,9 +16,7 @@ function Map() {
     destination,
     setDestination,
     showTraffic,
-    toggleTraffic,
     useTollRoads,
-    toggleTollRoads,
     setCurrentLocation
   } = useDeliveryStore();
   const routeMarker = useRef(null);
@@ -292,9 +290,9 @@ function Map() {
     <div className="w-full h-full relative">
       <div ref={mapContainer} className="w-full h-full" />
 
-      {/* ルート情報とコントロール */}
+      {/* ルート情報 */}
       {currentRoute && (
-        <div className="absolute bottom-0 left-0 right-0 bg-white shadow-lg border-t border-gray-200 p-4">
+        <div className="absolute bottom-0 left-0 right-0 bg-white shadow-lg border-t border-gray-200 p-4" style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom))' }}>
           {/* 距離と時間 */}
           <div className="flex gap-4 mb-3">
             <div className="flex-1 bg-blue-50 rounded-lg p-3">
@@ -309,30 +307,6 @@ function Map() {
                 {Math.round(currentRoute.duration / 60)} 分
               </div>
             </div>
-          </div>
-
-          {/* コントロールボタン */}
-          <div className="flex gap-2 mb-3">
-            <button
-              onClick={toggleTraffic}
-              className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-colors ${
-                showTraffic
-                  ? 'bg-orange-500 text-white'
-                  : 'bg-gray-200 text-gray-700'
-              }`}
-            >
-              {showTraffic ? '🟢 交通状況' : '⚪ 交通状況'}
-            </button>
-            <button
-              onClick={toggleTollRoads}
-              className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-colors ${
-                useTollRoads
-                  ? 'bg-blue-500 text-white'
-                  : 'bg-gray-200 text-gray-700'
-              }`}
-            >
-              {useTollRoads ? '🟢 有料道路' : '⚪ 有料道路'}
-            </button>
           </div>
 
           {/* 開始ボタン */}
