@@ -602,29 +602,30 @@ function Map({ onOpenSettings, onGeolocateReady }) {
       window.speechSynthesis.cancel();
     }
 
+    // ナビ終了前にルート全体表示に戻す
+    if (map.current && currentRoute) {
+      const coordinates = currentRoute.geometry.coordinates;
+      const bounds = coordinates.reduce((bounds, coord) => {
+        return bounds.extend(coord);
+      }, new mapboxgl.LngLatBounds(coordinates[0], coordinates[0]));
+
+      map.current.fitBounds(bounds, {
+        padding: { top: 80, bottom: 250, left: 50, right: 50 },
+        pitch: 0,
+        bearing: 0,
+        duration: 1000
+      });
+    }
+
     stopNavigation();
     lastSpokenStep.current = -1;
     userInteracted.current = false;
     setShowRecenterButton(false);
 
-    // カメラをリセット
+    // ルートマーカーを削除
     if (map.current && routeMarker.current) {
       routeMarker.current.remove();
       routeMarker.current = null;
-    }
-    if (map.current && map.current.getSource('route')) {
-      map.current.removeLayer('route');
-      map.current.removeSource('route');
-    }
-
-    // カメラを通常視点に
-    if (map.current) {
-      map.current.easeTo({
-        pitch: 0,
-        bearing: 0,
-        padding: { top: 0, bottom: 0, left: 0, right: 0 },
-        duration: 1000
-      });
     }
   };
 
@@ -641,24 +642,28 @@ function Map({ onOpenSettings, onGeolocateReady }) {
         if ('speechSynthesis' in window) {
           window.speechSynthesis.cancel();
         }
+
+        // ナビ終了前にルート全体表示に戻す
+        if (map.current && currentRoute) {
+          const coordinates = currentRoute.geometry.coordinates;
+          const bounds = coordinates.reduce((bounds, coord) => {
+            return bounds.extend(coord);
+          }, new mapboxgl.LngLatBounds(coordinates[0], coordinates[0]));
+
+          map.current.fitBounds(bounds, {
+            padding: { top: 80, bottom: 250, left: 50, right: 50 },
+            pitch: 0,
+            bearing: 0,
+            duration: 1000
+          });
+        }
+
         stopNavigation();
 
-        // カメラリセット
+        // ルートマーカーを削除
         if (map.current && routeMarker.current) {
           routeMarker.current.remove();
           routeMarker.current = null;
-        }
-        if (map.current && map.current.getSource('route')) {
-          map.current.removeLayer('route');
-          map.current.removeSource('route');
-        }
-        if (map.current) {
-          map.current.easeTo({
-            pitch: 0,
-            bearing: 0,
-            padding: { top: 0, bottom: 0, left: 0, right: 0 },
-            duration: 1000
-          });
         }
       }, 2000);
       return;

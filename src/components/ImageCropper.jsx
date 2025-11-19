@@ -7,22 +7,27 @@ function ImageCropper({ imageUrl, onCropComplete, onCancel }) {
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [scale, setScale] = useState(1);
+  const [cropSize, setCropSize] = useState(200);
 
   useEffect(() => {
     const img = new Image();
     img.onload = () => {
       setImage(img);
+      // 初期サイズを画像の短辺の60%に設定（最小100px、最大500px）
+      const minDimension = Math.min(img.width, img.height);
+      const initialSize = Math.max(100, Math.min(minDimension * 0.6, 500));
+      setCropSize(initialSize);
+
       // 初期位置を中央に設定
-      const size = Math.min(img.width, img.height, 300);
       setCropArea({
-        x: (img.width - size) / 2,
-        y: (img.height - size) / 2,
-        size: size
+        x: (img.width - initialSize) / 2,
+        y: (img.height - initialSize) / 2,
+        size: initialSize
       });
 
-      // スケールを計算
-      const maxWidth = 400;
-      const computedScale = Math.min(1, maxWidth / img.width);
+      // スケールを計算（画像全体が表示されるように）
+      const maxDisplaySize = 400;
+      const computedScale = Math.min(1, maxDisplaySize / Math.max(img.width, img.height));
       setScale(computedScale);
     };
     img.src = imageUrl;
@@ -159,6 +164,28 @@ function ImageCropper({ imageUrl, onCropComplete, onCancel }) {
     setIsDragging(false);
   };
 
+  const handleSizeChange = (e) => {
+    if (!image) return;
+    const newSize = parseInt(e.target.value);
+    const maxSize = Math.min(image.width, image.height);
+    const clampedSize = Math.max(50, Math.min(newSize, maxSize));
+
+    setCropSize(clampedSize);
+
+    // 現在の中心点を維持しながらサイズ変更
+    const centerX = cropArea.x + cropArea.size / 2;
+    const centerY = cropArea.y + cropArea.size / 2;
+
+    const newX = Math.max(0, Math.min(centerX - clampedSize / 2, image.width - clampedSize));
+    const newY = Math.max(0, Math.min(centerY - clampedSize / 2, image.height - clampedSize));
+
+    setCropArea({
+      x: newX,
+      y: newY,
+      size: clampedSize
+    });
+  };
+
   const handleCrop = () => {
     const cropCanvas = document.createElement('canvas');
     cropCanvas.width = cropArea.size;
@@ -203,6 +230,25 @@ function ImageCropper({ imageUrl, onCropComplete, onCancel }) {
             onTouchEnd={handleTouchEnd}
             className="border border-gray-300 cursor-move touch-none"
           />
+        </div>
+
+        {/* サイズ調整スライダー */}
+        <div className="mb-4">
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            切り抜きサイズ: {Math.round(cropSize)}px
+          </label>
+          <input
+            type="range"
+            min="50"
+            max={image ? Math.min(image.width, image.height) : 500}
+            value={cropSize}
+            onChange={handleSizeChange}
+            className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-500"
+          />
+          <div className="flex justify-between text-xs text-gray-500 mt-1">
+            <span>小</span>
+            <span>大</span>
+          </div>
         </div>
 
         <div className="flex gap-2 mt-auto">
