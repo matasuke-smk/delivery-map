@@ -4,19 +4,19 @@ function ImageCropper({ imageUrl, onCropComplete, onCancel }) {
   const canvasRef = useRef(null);
   const [image, setImage] = useState(null);
   const [cropArea, setCropArea] = useState({ x: 0, y: 0, size: 200 });
-  const [isDragging, setIsDragging] = useState(false);
-  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [scale, setScale] = useState(1);
-  const [cropSize, setCropSize] = useState(200);
+
+  // ピンチジェスチャー用の状態
+  const [lastTouchDistance, setLastTouchDistance] = useState(null);
+  const [lastTouchCenter, setLastTouchCenter] = useState(null);
 
   useEffect(() => {
     const img = new Image();
     img.onload = () => {
       setImage(img);
-      // 初期サイズを画像の短辺の60%に設定（最小100px、最大500px）
+      // 初期サイズを画像の短辺の40%に設定
       const minDimension = Math.min(img.width, img.height);
-      const initialSize = Math.max(100, Math.min(minDimension * 0.6, 500));
-      setCropSize(initialSize);
+      const initialSize = Math.max(100, Math.min(minDimension * 0.4, 500));
 
       // 初期位置を中央に設定
       setCropArea({
@@ -25,13 +25,39 @@ function ImageCropper({ imageUrl, onCropComplete, onCancel }) {
         size: initialSize
       });
 
-      // スケールを計算（画像全体が表示されるように）
-      const maxDisplaySize = 400;
-      const computedScale = Math.min(1, maxDisplaySize / Math.max(img.width, img.height));
-      setScale(computedScale);
+      // スケールを計算（画面全体に表示）
+      if (canvasRef.current) {
+        const container = canvasRef.current.parentElement;
+        const containerWidth = container.clientWidth;
+        const containerHeight = container.clientHeight;
+        const computedScale = Math.min(
+          containerWidth / img.width,
+          containerHeight / img.height
+        );
+        setScale(computedScale);
+      }
     };
     img.src = imageUrl;
   }, [imageUrl]);
+
+  // ウィンドウリサイズ時のスケール調整
+  useEffect(() => {
+    const handleResize = () => {
+      if (image && canvasRef.current) {
+        const container = canvasRef.current.parentElement;
+        const containerWidth = container.clientWidth;
+        const containerHeight = container.clientHeight;
+        const computedScale = Math.min(
+          containerWidth / image.width,
+          containerHeight / image.height
+        );
+        setScale(computedScale);
+      }
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [image]);
 
   const drawCanvas = useCallback(() => {
     if (!image || !canvasRef.current) return;
@@ -47,7 +73,7 @@ function ImageCropper({ imageUrl, onCropComplete, onCancel }) {
     ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
 
     // 暗いオーバーレイ
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     // 切り抜き領域をクリアして明るく表示
@@ -64,126 +90,109 @@ function ImageCropper({ imageUrl, onCropComplete, onCancel }) {
       scaledCrop.x, scaledCrop.y, scaledCrop.size, scaledCrop.size
     );
 
-    // 切り抜き領域の枠線
-    ctx.strokeStyle = '#3B82F6';
-    ctx.lineWidth = 2;
+    // 切り抜き領域の枠線（白く太めに）
+    ctx.strokeStyle = '#FFFFFF';
+    ctx.lineWidth = 3;
     ctx.strokeRect(scaledCrop.x, scaledCrop.y, scaledCrop.size, scaledCrop.size);
+
+    // 四隅にハンドル（視覚的なヒント）
+    const handleSize = 20;
+    ctx.fillStyle = '#FFFFFF';
+    const corners = [
+      [scaledCrop.x, scaledCrop.y],
+      [scaledCrop.x + scaledCrop.size, scaledCrop.y],
+      [scaledCrop.x, scaledCrop.y + scaledCrop.size],
+      [scaledCrop.x + scaledCrop.size, scaledCrop.y + scaledCrop.size]
+    ];
+    corners.forEach(([x, y]) => {
+      ctx.fillRect(x - handleSize / 2, y - handleSize / 2, handleSize, handleSize);
+    });
   }, [image, cropArea, scale]);
 
   useEffect(() => {
     drawCanvas();
   }, [drawCanvas]);
 
-  const handleMouseDown = (e) => {
+  // 2点間の距離を計算
+  const getTouchDistance = (touch1, touch2) => {
+    const dx = touch1.clientX - touch2.clientX;
+    const dy = touch1.clientY - touch2.clientY;
+    return Math.sqrt(dx * dx + dy * dy);
+  };
+
+  // 2点の中心点を計算
+  const getTouchCenter = (touch1, touch2) => {
+    return {
+      x: (touch1.clientX + touch2.clientX) / 2,
+      y: (touch1.clientY + touch2.clientY) / 2
+    };
+  };
+
+  const handleTouchStart = (e) => {
     if (!canvasRef.current || !image) return;
     e.preventDefault();
 
-    const canvas = canvasRef.current;
-    const rect = canvas.getBoundingClientRect();
-    const x = (e.clientX - rect.left) / scale;
-    const y = (e.clientY - rect.top) / scale;
-
-    console.log('マウスダウン:', { x, y, cropArea, scale });
-
-    // クリックが切り抜き領域内かチェック
-    if (
-      x >= cropArea.x &&
-      x <= cropArea.x + cropArea.size &&
-      y >= cropArea.y &&
-      y <= cropArea.y + cropArea.size
-    ) {
-      console.log('ドラッグ開始');
-      setIsDragging(true);
-      setDragStart({ x: x - cropArea.x, y: y - cropArea.y });
-    }
-  };
-
-  const handleMouseMove = (e) => {
-    if (!isDragging || !canvasRef.current || !image) return;
-    e.preventDefault();
-
-    const canvas = canvasRef.current;
-    const rect = canvas.getBoundingClientRect();
-    const x = (e.clientX - rect.left) / scale;
-    const y = (e.clientY - rect.top) / scale;
-
-    const newX = Math.max(0, Math.min(x - dragStart.x, image.width - cropArea.size));
-    const newY = Math.max(0, Math.min(y - dragStart.y, image.height - cropArea.size));
-
-    console.log('移動中:', { newX, newY });
-
-    setCropArea(prev => ({ ...prev, x: newX, y: newY }));
-  };
-
-  const handleMouseUp = (e) => {
-    if (isDragging) {
-      console.log('ドラッグ終了');
-    }
-    setIsDragging(false);
-  };
-
-  // タッチイベント対応
-  const handleTouchStart = (e) => {
-    if (!canvasRef.current || !image || e.touches.length === 0) return;
-    e.preventDefault();
-
-    const canvas = canvasRef.current;
-    const rect = canvas.getBoundingClientRect();
-    const touch = e.touches[0];
-    const x = (touch.clientX - rect.left) / scale;
-    const y = (touch.clientY - rect.top) / scale;
-
-    if (
-      x >= cropArea.x &&
-      x <= cropArea.x + cropArea.size &&
-      y >= cropArea.y &&
-      y <= cropArea.y + cropArea.size
-    ) {
-      setIsDragging(true);
-      setDragStart({ x: x - cropArea.x, y: y - cropArea.y });
+    if (e.touches.length === 2) {
+      // 2本指の場合：ピンチジェスチャーの初期化
+      const distance = getTouchDistance(e.touches[0], e.touches[1]);
+      const center = getTouchCenter(e.touches[0], e.touches[1]);
+      setLastTouchDistance(distance);
+      setLastTouchCenter(center);
     }
   };
 
   const handleTouchMove = (e) => {
-    if (!isDragging || !canvasRef.current || !image || e.touches.length === 0) return;
+    if (!canvasRef.current || !image) return;
     e.preventDefault();
 
-    const canvas = canvasRef.current;
-    const rect = canvas.getBoundingClientRect();
-    const touch = e.touches[0];
-    const x = (touch.clientX - rect.left) / scale;
-    const y = (touch.clientY - rect.top) / scale;
+    if (e.touches.length === 2 && lastTouchDistance && lastTouchCenter) {
+      // 2本指の場合：ピンチ＆ドラッグ
+      const canvas = canvasRef.current;
+      const rect = canvas.getBoundingClientRect();
 
-    const newX = Math.max(0, Math.min(x - dragStart.x, image.width - cropArea.size));
-    const newY = Math.max(0, Math.min(y - dragStart.y, image.height - cropArea.size));
+      const currentDistance = getTouchDistance(e.touches[0], e.touches[1]);
+      const currentCenter = getTouchCenter(e.touches[0], e.touches[1]);
 
-    setCropArea(prev => ({ ...prev, x: newX, y: newY }));
+      // ピンチによるサイズ変更
+      const distanceRatio = currentDistance / lastTouchDistance;
+      const newSize = cropArea.size * distanceRatio;
+      const minSize = 50;
+      const maxSize = Math.min(image.width, image.height);
+      const clampedSize = Math.max(minSize, Math.min(newSize, maxSize));
+
+      // 2本指ドラッグによる位置変更
+      const centerDeltaX = (currentCenter.x - lastTouchCenter.x) / scale;
+      const centerDeltaY = (currentCenter.y - lastTouchCenter.y) / scale;
+
+      // 中心点を維持しながらサイズ変更
+      const cropCenterX = cropArea.x + cropArea.size / 2;
+      const cropCenterY = cropArea.y + cropArea.size / 2;
+
+      // 新しい位置を計算（ドラッグ分も考慮）
+      const newX = cropCenterX - clampedSize / 2 + centerDeltaX;
+      const newY = cropCenterY - clampedSize / 2 + centerDeltaY;
+
+      // 画像の範囲内に制限
+      const clampedX = Math.max(0, Math.min(newX, image.width - clampedSize));
+      const clampedY = Math.max(0, Math.min(newY, image.height - clampedSize));
+
+      setCropArea({
+        x: clampedX,
+        y: clampedY,
+        size: clampedSize
+      });
+
+      setLastTouchDistance(currentDistance);
+      setLastTouchCenter(currentCenter);
+    }
   };
 
-  const handleTouchEnd = () => {
-    setIsDragging(false);
-  };
-
-  const handleSizeChange = (e) => {
-    if (!image) return;
-    const newSize = parseInt(e.target.value);
-    const maxSize = Math.min(image.width, image.height);
-    const clampedSize = Math.max(50, Math.min(newSize, maxSize));
-
-    setCropSize(clampedSize);
-
-    // 現在の中心点を維持しながらサイズ変更
-    const centerX = cropArea.x + cropArea.size / 2;
-    const centerY = cropArea.y + cropArea.size / 2;
-
-    const newX = Math.max(0, Math.min(centerX - clampedSize / 2, image.width - clampedSize));
-    const newY = Math.max(0, Math.min(centerY - clampedSize / 2, image.height - clampedSize));
-
-    setCropArea({
-      x: newX,
-      y: newY,
-      size: clampedSize
-    });
+  const handleTouchEnd = (e) => {
+    if (e.touches.length < 2) {
+      // 2本指が離れたらリセット
+      setLastTouchDistance(null);
+      setLastTouchCenter(null);
+    }
   };
 
   const handleCrop = () => {
@@ -204,121 +213,52 @@ function ImageCropper({ imageUrl, onCropComplete, onCancel }) {
 
   if (!image) {
     return (
-      <div className="fixed inset-0 bg-gradient-to-br from-blue-600 to-purple-600 bg-opacity-95 flex items-center justify-center z-[60] backdrop-blur-sm">
-        <div className="bg-white rounded-2xl p-8 shadow-2xl">
-          <div className="flex items-center gap-3">
-            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
-            <p className="text-gray-700 font-medium">画像を読み込み中...</p>
-          </div>
+      <div className="fixed inset-0 bg-black flex items-center justify-center z-[60]">
+        <div className="flex items-center gap-3 text-white">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
+          <p className="text-lg font-medium">読み込み中...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="fixed inset-0 bg-gradient-to-br from-blue-600 to-purple-600 bg-opacity-95 flex items-center justify-center z-[60] p-4 backdrop-blur-sm">
-      <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full max-h-[90vh] flex flex-col overflow-hidden">
-        {/* ヘッダー */}
-        <div className="bg-gradient-to-r from-blue-500 to-purple-500 p-6 text-white">
-          <h3 className="text-xl font-bold mb-2">✨ アイコンを作成</h3>
-          <p className="text-sm text-blue-100">青い枠をドラッグして切り抜く範囲を調整</p>
-        </div>
+    <div className="fixed inset-0 bg-black z-[60] flex flex-col">
+      {/* キャンバスエリア（全画面） */}
+      <div className="flex-1 relative flex items-center justify-center overflow-hidden">
+        <canvas
+          ref={canvasRef}
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
+          className="touch-none"
+        />
 
-        {/* コンテンツエリア */}
-        <div className="p-6 flex-1 overflow-auto">
-          {/* プレビューエリア */}
-          <div className="mb-6 flex justify-center">
-            <div className="relative">
-              <canvas
-                ref={canvasRef}
-                onMouseDown={handleMouseDown}
-                onMouseMove={handleMouseMove}
-                onMouseUp={handleMouseUp}
-                onMouseLeave={handleMouseUp}
-                onTouchStart={handleTouchStart}
-                onTouchMove={handleTouchMove}
-                onTouchEnd={handleTouchEnd}
-                className="rounded-lg shadow-lg cursor-move touch-none border-4 border-gray-100"
-              />
-              <div className="absolute -bottom-3 left-1/2 transform -translate-x-1/2 bg-white px-3 py-1 rounded-full shadow-md border border-gray-200">
-                <span className="text-xs font-medium text-gray-600">ドラッグで移動</span>
-              </div>
-            </div>
+        {/* 操作説明（オーバーレイ） */}
+        <div className="absolute top-6 left-0 right-0 flex justify-center pointer-events-none">
+          <div className="bg-black bg-opacity-70 backdrop-blur-sm px-6 py-3 rounded-full">
+            <p className="text-white text-sm font-medium">
+              2本指でピンチして拡大縮小・移動
+            </p>
           </div>
-
-          {/* サイズ調整スライダー */}
-          <div className="bg-gradient-to-r from-blue-50 to-purple-50 rounded-xl p-4 border border-blue-100">
-            <div className="flex items-center justify-between mb-3">
-              <label className="text-sm font-semibold text-gray-700">
-                📏 切り抜きサイズ
-              </label>
-              <span className="text-lg font-bold text-blue-600">{Math.round(cropSize)}px</span>
-            </div>
-            <input
-              type="range"
-              min="50"
-              max={image ? Math.min(image.width, image.height) : 500}
-              value={cropSize}
-              onChange={handleSizeChange}
-              className="w-full h-3 bg-gradient-to-r from-blue-200 to-purple-200 rounded-full appearance-none cursor-pointer slider-thumb"
-              style={{
-                WebkitAppearance: 'none',
-                appearance: 'none',
-              }}
-            />
-            <div className="flex justify-between text-xs text-gray-500 mt-2">
-              <span className="font-medium">🔍 小</span>
-              <span className="font-medium">🔎 大</span>
-            </div>
-          </div>
-        </div>
-
-        {/* フッターボタン */}
-        <div className="p-6 bg-gray-50 border-t border-gray-100 flex gap-3">
-          <button
-            onClick={onCancel}
-            className="flex-1 px-6 py-3 bg-white border-2 border-gray-300 text-gray-700 rounded-xl font-semibold hover:bg-gray-50 hover:border-gray-400 transition-all shadow-sm"
-          >
-            キャンセル
-          </button>
-          <button
-            onClick={handleCrop}
-            className="flex-1 px-6 py-3 bg-gradient-to-r from-blue-500 to-purple-500 text-white rounded-xl font-semibold hover:from-blue-600 hover:to-purple-600 transition-all shadow-lg"
-          >
-            ✓ 完了
-          </button>
         </div>
       </div>
 
-      <style jsx>{`
-        .slider-thumb::-webkit-slider-thumb {
-          -webkit-appearance: none;
-          appearance: none;
-          width: 24px;
-          height: 24px;
-          border-radius: 50%;
-          background: linear-gradient(135deg, #3b82f6, #8b5cf6);
-          cursor: pointer;
-          box-shadow: 0 2px 8px rgba(59, 130, 246, 0.4);
-          transition: transform 0.2s;
-        }
-        .slider-thumb::-webkit-slider-thumb:hover {
-          transform: scale(1.2);
-        }
-        .slider-thumb::-moz-range-thumb {
-          width: 24px;
-          height: 24px;
-          border-radius: 50%;
-          background: linear-gradient(135deg, #3b82f6, #8b5cf6);
-          cursor: pointer;
-          box-shadow: 0 2px 8px rgba(59, 130, 246, 0.4);
-          transition: transform 0.2s;
-          border: none;
-        }
-        .slider-thumb::-moz-range-thumb:hover {
-          transform: scale(1.2);
-        }
-      `}</style>
+      {/* 下部ボタン */}
+      <div className="bg-black bg-opacity-90 backdrop-blur-sm p-4 flex gap-3 border-t border-gray-700">
+        <button
+          onClick={onCancel}
+          className="flex-1 px-6 py-4 bg-gray-700 text-white rounded-xl font-semibold hover:bg-gray-600 transition-all active:scale-95"
+        >
+          キャンセル
+        </button>
+        <button
+          onClick={handleCrop}
+          className="flex-1 px-6 py-4 bg-blue-500 text-white rounded-xl font-semibold hover:bg-blue-600 transition-all active:scale-95"
+        >
+          完了
+        </button>
+      </div>
     </div>
   );
 }
