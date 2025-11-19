@@ -130,12 +130,16 @@ function Map({ onOpenSettings }) {
 
       // 地図クリックでルート検索
       map.current.on('click', async (e) => {
+        // ナビ中は地図クリックを無視
+        const storeState = useDeliveryStore.getState();
+        if (storeState.isNavigating) {
+          console.log('🔵 ナビ中のため地図クリックを無視');
+          return;
+        }
+
         const { lng, lat } = e.lngLat;
 
         console.log('🔵 地図クリック:', { lat, lng });
-
-        // ストアから最新の位置情報を取得
-        const storeState = useDeliveryStore.getState();
         console.log('🔵 ストア内のcurrentLocation:', storeState.currentLocation);
 
         // 目的地マーカーを更新
@@ -354,11 +358,10 @@ function Map({ onOpenSettings }) {
         const topPadding = mapHeight * 0.6; // 上部60%をパディング
         const bottomPadding = 0; // 下部パディングなし
 
-        // 最大ズーム-5
-        const maxZoom = map.current.getMaxZoom();
-        const targetZoom = maxZoom - 5;
+        // 最大ズーム-5（明示的に17に設定）
+        const targetZoom = 17;
 
-        console.log('ナビ開始 - ズーム:', targetZoom, 'padding:', { top: topPadding, bottom: bottomPadding });
+        console.log('ナビ開始 - ズーム:', targetZoom, 'maxZoom:', map.current.getMaxZoom(), 'padding:', { top: topPadding, bottom: bottomPadding });
 
         map.current.flyTo({
           center: [currentLocation.lng, currentLocation.lat],
@@ -388,9 +391,8 @@ function Map({ onOpenSettings }) {
       const topPadding = mapHeight * 0.6; // 上部60%をパディング
       const bottomPadding = 0;
 
-      // 最大ズーム-5
-      const maxZoom = map.current.getMaxZoom();
-      const targetZoom = maxZoom - 5;
+      // ズーム17に設定
+      const targetZoom = 17;
 
       map.current.flyTo({
         center: [currentLocation.lng, currentLocation.lat],
@@ -525,6 +527,7 @@ function Map({ onOpenSettings }) {
 
       map.current.easeTo({
         center: [currentLocation.lng, currentLocation.lat],
+        zoom: 17,
         bearing: bearing,
         padding: { top: topPadding, bottom: bottomPadding, left: 0, right: 0 },
         duration: 1000,
