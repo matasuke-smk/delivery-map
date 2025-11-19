@@ -215,7 +215,7 @@ function Map() {
         }, new mapboxgl.LngLatBounds(coordinates[0], coordinates[0]));
 
         map.current.fitBounds(bounds, {
-          padding: 50
+          padding: { top: 80, bottom: 250, left: 50, right: 50 }
         });
 
         console.log('ルート情報:', {
