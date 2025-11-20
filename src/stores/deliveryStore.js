@@ -34,6 +34,7 @@ const useDeliveryStore = create((set, get) => ({
 
   // 有料道路使用切り替え
   toggleTollRoads: () => set((state) => ({ useTollRoads: !state.useTollRoads })),
+  setUseTollRoads: (value) => set({ useTollRoads: value }),
 
   // ナビゲーション開始・終了
   startNavigation: () => set({ isNavigating: true, currentStepIndex: 0 }),

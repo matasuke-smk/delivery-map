@@ -87,7 +87,33 @@ export const parseGoogleMapsUrl = (url) => {
       return result;
     }
 
-    // パターン7: saddr（開始地点）とdaddr（目的地）パラメータ
+    // パターン7: destination パラメータ（Uberドライバーアプリが使用）
+    if (searchParams.has('destination')) {
+      const destination = searchParams.get('destination');
+
+      // 座標形式のチェック
+      const coordPattern = /^(-?\d+\.\d+),(-?\d+\.\d+)$/;
+      const coordMatch = destination.match(coordPattern);
+
+      if (coordMatch) {
+        result.lat = parseFloat(coordMatch[1]);
+        result.lng = parseFloat(coordMatch[2]);
+      } else {
+        result.address = destination;
+      }
+
+      // avoidパラメータの処理（高速道路を避ける設定）
+      if (searchParams.has('avoid')) {
+        const avoid = searchParams.get('avoid');
+        if (avoid === 'highways') {
+          result.avoidHighways = true;
+        }
+      }
+
+      return result;
+    }
+
+    // パターン8: saddr（開始地点）とdaddr（目的地）パラメータ
     if (searchParams.has('daddr')) {
       const daddr = searchParams.get('daddr');
 
@@ -104,7 +130,7 @@ export const parseGoogleMapsUrl = (url) => {
       return result;
     }
 
-    // パターン8: geoスキーム (geo:lat,lng)
+    // パターン9: geoスキーム (geo:lat,lng)
     if (url.startsWith('geo:')) {
       const geoMatch = url.match(/geo:(-?\d+\.\d+),(-?\d+\.\d+)/);
       if (geoMatch) {
@@ -114,7 +140,7 @@ export const parseGoogleMapsUrl = (url) => {
       }
     }
 
-    // パターン9: maps.app.goo.gl短縮URL（リダイレクト先を解析）
+    // パターン10: maps.app.goo.gl短縮URL（リダイレクト先を解析）
     if (urlObj.hostname === 'maps.app.goo.gl') {
       // 短縮URLの場合、実際にはリダイレクト先のURLを取得する必要があるため
       // ここではURLをそのまま返す

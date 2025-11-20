@@ -6,7 +6,7 @@ import locationTracker from './services/locationTracker';
 import { handleExternalUrl } from './services/urlParser';
 
 function App() {
-  const { loadData, showTraffic, toggleTraffic, useTollRoads, toggleTollRoads, mapPitch, setMapPitch, voiceVolume, setVoiceVolume, currentLocationIcon, setCurrentLocationIcon, setDestination } = useDeliveryStore();
+  const { loadData, showTraffic, toggleTraffic, useTollRoads, toggleTollRoads, setUseTollRoads, mapPitch, setMapPitch, voiceVolume, setVoiceVolume, currentLocationIcon, setCurrentLocationIcon, setDestination } = useDeliveryStore();
   const [isLoading, setIsLoading] = useState(true);
   const [showSettings, setShowSettings] = useState(false);
   const [geolocateControl, setGeolocateControl] = useState(null);
@@ -83,6 +83,13 @@ function App() {
       if (destination) {
         console.log('目的地設定:', destination);
 
+        // 高速道路を避ける設定がある場合
+        if (destination.avoidHighways) {
+          console.log('高速道路を避ける設定が検出されました');
+          // useTollRoads を false に設定（高速道路を使わない）
+          setUseTollRoads(false);
+        }
+
         // 目的地を設定
         setDestination({
           lat: destination.lat,
@@ -96,7 +103,8 @@ function App() {
         }
 
         // アラートで通知
-        alert(`目的地を設定しました:\n${destination.placeName || `座標: ${destination.lat}, ${destination.lng}`}`);
+        const avoidMessage = destination.avoidHighways ? '\n※高速道路を避けるルートで検索します' : '';
+        alert(`目的地を設定しました:\n${destination.placeName || `座標: ${destination.lat}, ${destination.lng}`}${avoidMessage}`);
       } else {
         console.warn('URLから目的地を解析できませんでした:', url);
       }
