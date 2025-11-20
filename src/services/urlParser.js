@@ -190,15 +190,26 @@ export const geocodeAddress = async (address, mapboxToken) => {
 
 /**
  * Overpass APIを使って建物名を取得
- * シンプルなクエリで確実に動作させる
+ * 建物（マンション・アパート）を優先
  */
 export const getBuildingNameFromOSM = async (lat, lng) => {
   try {
-    // シンプルなクエリ: 半径30m以内の名前付きノードとウェイ
+    // 建物を優先的に検索
     const radius = 30;
-    const query = `[out:json][timeout:10];(node["name"](around:${radius},${lat},${lng});way["name"](around:${radius},${lat},${lng}););out center ${radius};`;
+    const query = `
+      [out:json][timeout:10];
+      (
+        node["building"]["name"](around:${radius},${lat},${lng});
+        way["building"]["name"](around:${radius},${lat},${lng});
+        node["shop"]["name"](around:${radius},${lat},${lng});
+        way["shop"]["name"](around:${radius},${lat},${lng});
+        node["amenity"]["name"](around:${radius},${lat},${lng});
+        way["amenity"]["name"](around:${radius},${lat},${lng});
+      );
+      out center ${radius * 2};
+    `;
 
-    console.log('🔍 OSM検索開始:', { lat, lng });
+    console.log('🔍 OSM検索開始:', { lat, lng, radius });
 
     const response = await fetch('https://overpass-api.de/api/interpreter', {
       method: 'POST',
@@ -248,25 +259,38 @@ export const getBuildingNameFromOSM = async (lat, lng) => {
         const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
         const distance = R * c;
 
-        // スコアリング（優先度 × 距離の逆数）
+        // スコアリング: 建物・店舗・施設で優先度を設定
         let priority = 1;
         let typeStr = 'poi';
-        if (element.tags.shop) {
-          priority = 100; // 店舗が最優先
+
+        // アパート・マンションの場合は超優先
+        if (element.tags.building && element.tags.name) {
+          const buildingType = element.tags.building;
+          if (buildingType === 'apartments' || buildingType === 'house' ||
+              buildingType === 'residential' || buildingType === 'yes' ||
+              element.tags.name.includes('マンション') ||
+              element.tags.name.includes('アパート') ||
+              element.tags.name.includes('ハイツ') ||
+              element.tags.name.includes('コーポ')) {
+            priority = 150; // 建物名を最優先
+            typeStr = 'building';
+          } else {
+            priority = 80; // その他の建物
+            typeStr = 'building';
+          }
+        } else if (element.tags.shop) {
+          priority = 100; // 店舗
           typeStr = 'shop';
         } else if (element.tags.amenity) {
-          priority = 90; // 施設が次
+          priority = 90; // 施設
           typeStr = 'amenity';
-        } else if (element.tags.building) {
-          priority = 50; // 建物
-          typeStr = 'building';
         }
 
-        // 距離が近いほど高スコア（距離0mなら無限大、100mなら1）
+        // 距離が近いほど高スコア
         const distanceScore = 100 / (distance + 1);
         const score = priority * distanceScore;
 
-        console.log(`📍 ${element.tags.name} (${typeStr}): ${distance.toFixed(1)}m, score: ${score.toFixed(2)}`);
+        console.log(`📍 ${element.tags.name} (${typeStr}): ${distance.toFixed(1)}m, priority: ${priority}, score: ${score.toFixed(2)}`);
 
         if (score > bestScore) {
           bestScore = score;
@@ -275,34 +299,13 @@ export const getBuildingNameFromOSM = async (lat, lng) => {
       }
 
       if (bestElement && bestElement.tags.name) {
-        // 距離を再計算
-        let elementLat, elementLng;
-        if (bestElement.type === 'node') {
-          elementLat = bestElement.lat;
-          elementLng = bestElement.lon;
-        } else if (bestElement.center) {
-          elementLat = bestElement.center.lat;
-          elementLng = bestElement.center.lon;
-        }
-        const R = 6371000;
-        const φ1 = lat * Math.PI / 180;
-        const φ2 = elementLat * Math.PI / 180;
-        const Δφ = (elementLat - lat) * Math.PI / 180;
-        const Δλ = (elementLng - lng) * Math.PI / 180;
-        const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
-                  Math.cos(φ1) * Math.cos(φ2) *
-                  Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
-        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-        const distance = R * c;
-
         const result = {
           name: bestElement.tags.name,
           fullName: bestElement.tags.name,
           type: bestElement.tags.shop ? 'shop' :
                 bestElement.tags.amenity ? 'amenity' :
                 bestElement.tags.building ? 'building' : 'poi',
-          source: 'osm',
-          distance: distance
+          source: 'osm'
         };
         console.log('✅ 最適な建物:', result);
         return result;
@@ -328,7 +331,7 @@ export const reverseGeocode = async (lat, lng, mapboxToken) => {
   try {
     console.log('📍 Mapbox POI検索開始...');
     const response = await fetch(
-      `https://api.mapbox.com/geocoding/v5/mapbox.places/${lng},${lat}.json?access_token=${mapboxToken}&language=ja&types=poi&limit=5`
+      `https://api.mapbox.com/geocoding/v5/mapbox.places/${lng},${lat}.json?access_token=${mapboxToken}&language=ja&types=poi&limit=10`
     );
 
     if (response.ok) {
@@ -336,15 +339,38 @@ export const reverseGeocode = async (lat, lng, mapboxToken) => {
       console.log('📦 Mapbox POI結果:', data.features?.length || 0, '件');
 
       if (data.features && data.features.length > 0) {
-        // 最も近いPOIを使用
+        // 各POIの詳細をログ出力
+        data.features.forEach((f, i) => {
+          console.log(`  ${i + 1}. text: "${f.text}", place_name: "${f.place_name}"`);
+          if (f.properties) {
+            console.log(`     properties:`, f.properties);
+          }
+        });
+
+        // 最も近いPOIを使用（place_nameに詳細情報が含まれる）
         const poi = data.features[0];
+
+        // place_nameから店舗名全体を抽出（最初のカンマまで）
+        let detailedName = poi.text;
+        if (poi.place_name) {
+          const parts = poi.place_name.split(',');
+          if (parts.length > 0) {
+            detailedName = parts[0].trim();
+          }
+        }
+
+        // propertiesにnameがあればそれを使用
+        if (poi.properties && poi.properties.name) {
+          detailedName = poi.properties.name;
+        }
+
         const result = {
-          name: poi.text,
+          name: detailedName,
           fullName: poi.place_name,
           type: 'poi',
           source: 'mapbox-poi'
         };
-        console.log('✅ Mapbox POI取得成功:', result.name);
+        console.log('✅ Mapbox POI取得成功:', result.name, '(full:', result.fullName, ')');
         return result;
       }
     }
@@ -368,7 +394,7 @@ export const reverseGeocode = async (lat, lng, mapboxToken) => {
   try {
     console.log('🏠 Mapbox住所検索開始...');
     const response = await fetch(
-      `https://api.mapbox.com/geocoding/v5/mapbox.places/${lng},${lat}.json?access_token=${mapboxToken}&language=ja&types=address,place&limit=1`
+      `https://api.mapbox.com/geocoding/v5/mapbox.places/${lng},${lat}.json?access_token=${mapboxToken}&language=ja&types=address,place&limit=5`
     );
 
     if (!response.ok) {
@@ -379,9 +405,24 @@ export const reverseGeocode = async (lat, lng, mapboxToken) => {
     console.log('📦 Mapbox住所結果:', data.features?.length || 0, '件');
 
     if (data.features && data.features.length > 0) {
+      // 住所結果もログ出力
+      data.features.forEach((f, i) => {
+        console.log(`  ${i + 1}. text: "${f.text}", place_name: "${f.place_name}"`);
+      });
+
       const feature = data.features[0];
+
+      // place_nameから詳細な住所を取得
+      let addressName = feature.text;
+      if (feature.place_name) {
+        const parts = feature.place_name.split(',');
+        if (parts.length > 0) {
+          addressName = parts[0].trim();
+        }
+      }
+
       const result = {
-        name: feature.text,
+        name: addressName,
         fullName: feature.place_name,
         type: feature.place_type[0],
         source: 'mapbox-address'
