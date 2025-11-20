@@ -193,19 +193,19 @@ export const geocodeAddress = async (address, mapboxToken) => {
  */
 export const getBuildingNameFromOSM = async (lat, lng) => {
   try {
-    // 半径20m以内の建物・POIを検索
-    const radius = 20;
+    // 半径50m以内の建物・POIを検索（範囲を拡大）
+    const radius = 50;
     const query = `
       [out:json][timeout:10];
       (
         node["name"](around:${radius},${lat},${lng});
-        way["name"]["building"](around:${radius},${lat},${lng});
-        way["name"]["amenity"](around:${radius},${lat},${lng});
-        way["name"]["shop"](around:${radius},${lat},${lng});
-        relation["name"]["building"](around:${radius},${lat},${lng});
+        way["name"](around:${radius},${lat},${lng});
+        relation["name"](around:${radius},${lat},${lng});
       );
-      out body 10;
+      out center 20;
     `;
+
+    console.log('🔍 OSM検索開始:', { lat, lng, radius });
 
     const response = await fetch('https://overpass-api.de/api/interpreter', {
       method: 'POST',
@@ -223,9 +223,6 @@ export const getBuildingNameFromOSM = async (lat, lng) => {
     console.log('🏢 Overpass API結果:', data);
 
     if (data.elements && data.elements.length > 0) {
-      // 建物タグ、店舗タグ、施設タグを持つ要素を優先
-      const priorityOrder = ['building', 'shop', 'amenity', 'name'];
-
       // 最も近い建物を探す
       let closestElement = null;
       let minDistance = Infinity;
@@ -238,16 +235,36 @@ export const getBuildingNameFromOSM = async (lat, lng) => {
           if (element.type === 'node') {
             elementLat = element.lat;
             elementLng = element.lon;
-          } else if (element.type === 'way' && element.center) {
-            elementLat = element.center.lat;
-            elementLng = element.center.lon;
+          } else if (element.type === 'way' || element.type === 'relation') {
+            // centerが利用可能な場合
+            if (element.center) {
+              elementLat = element.center.lat;
+              elementLng = element.center.lon;
+            } else if (element.lat && element.lon) {
+              elementLat = element.lat;
+              elementLng = element.lon;
+            } else {
+              // 中心座標がない場合はスキップ
+              continue;
+            }
           } else {
             continue;
           }
 
-          const distance = Math.sqrt(
-            Math.pow(elementLat - lat, 2) + Math.pow(elementLng - lng, 2)
-          );
+          // ハバーサイン公式で距離を計算（メートル単位）
+          const R = 6371000; // 地球の半径（メートル）
+          const φ1 = lat * Math.PI / 180;
+          const φ2 = elementLat * Math.PI / 180;
+          const Δφ = (elementLat - lat) * Math.PI / 180;
+          const Δλ = (elementLng - lng) * Math.PI / 180;
+
+          const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+                    Math.cos(φ1) * Math.cos(φ2) *
+                    Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+          const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+          const distance = R * c;
+
+          console.log(`📍 ${element.tags.name}: ${distance.toFixed(1)}m`);
 
           if (distance < minDistance) {
             minDistance = distance;
@@ -257,17 +274,21 @@ export const getBuildingNameFromOSM = async (lat, lng) => {
       }
 
       if (closestElement && closestElement.tags.name) {
-        return {
+        const result = {
           name: closestElement.tags.name,
           fullName: closestElement.tags.name,
           type: closestElement.tags.building ? 'building' :
                 closestElement.tags.shop ? 'shop' :
                 closestElement.tags.amenity ? 'amenity' : 'poi',
-          source: 'osm'
+          source: 'osm',
+          distance: minDistance
         };
+        console.log('✅ 最も近い建物:', result);
+        return result;
       }
     }
 
+    console.log('⚠️ OSMで建物が見つかりませんでした');
     return null;
   } catch (error) {
     console.error('🔴 Overpass API error:', error);

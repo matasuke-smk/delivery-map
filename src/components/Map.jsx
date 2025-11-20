@@ -451,12 +451,22 @@ const Map = forwardRef(({ onOpenSettings, onGeolocateReady }, ref) => {
 
       // ドラッグ検出（長押しタイマーをキャンセル）
       const handlePointerMove = (e) => {
+        // マルチタッチ中は長押しタイマーをクリア
+        if (e.originalEvent && e.originalEvent.touches && e.originalEvent.touches.length > 1) {
+          if (longPressTimer) {
+            clearTimeout(longPressTimer);
+            longPressTimer = null;
+          }
+          touchCount = e.originalEvent.touches.length;
+          return;
+        }
+
         if (touchStartPosition && longPressTimer) {
           const dx = Math.abs(e.lngLat.lng - touchStartPosition.lng);
           const dy = Math.abs(e.lngLat.lat - touchStartPosition.lat);
 
-          // 一定以上動いたらドラッグとみなす
-          if (dx > 0.0001 || dy > 0.0001) {
+          // 一定以上動いたらドラッグとみなす（閾値を大きく設定してズーム操作を考慮）
+          if (dx > 0.001 || dy > 0.001) {
             clearTimeout(longPressTimer);
             longPressTimer = null;
           }
@@ -487,7 +497,7 @@ const Map = forwardRef(({ onOpenSettings, onGeolocateReady }, ref) => {
             const dx = Math.abs(e.lngLat.lng - touchStartPosition.lng);
             const dy = Math.abs(e.lngLat.lat - touchStartPosition.lat);
 
-            if (dx < 0.0001 && dy < 0.0001) {
+            if (dx < 0.001 && dy < 0.001) {
               // ダブルタップチェック
               if (currentTime - lastTapTime < DOUBLE_TAP_DELAY && lastTapTime > 0) {
                 // ダブルタップ検出
@@ -1205,8 +1215,8 @@ const Map = forwardRef(({ onOpenSettings, onGeolocateReady }, ref) => {
         </div>
       )}
 
-      {/* 目的地名称表示（ナビゲーション中のみ） */}
-      {isNavigating && destination && (
+      {/* 目的地名称表示（目的地が設定されている場合） */}
+      {destination && (
         <div className="absolute top-4 left-1/2 transform -translate-x-1/2 bg-white shadow-lg rounded-full px-6 py-3 z-10 max-w-xs">
           <div className="flex items-center gap-2">
             <svg className="w-5 h-5 text-red-500 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24">
