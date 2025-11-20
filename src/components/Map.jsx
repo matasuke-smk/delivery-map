@@ -1,11 +1,11 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, forwardRef, useImperativeHandle } from 'react';
 import mapboxgl from 'mapbox-gl';
 import useDeliveryStore from '../stores/deliveryStore';
 
 // Mapboxトークン設定
 mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN || '';
 
-function Map({ onOpenSettings, onGeolocateReady }) {
+const Map = forwardRef(({ onOpenSettings, onGeolocateReady }, ref) => {
   const mapContainer = useRef(null);
   const map = useRef(null);
   const [isOverviewMode, setIsOverviewMode] = React.useState(false);
@@ -35,6 +35,51 @@ function Map({ onOpenSettings, onGeolocateReady }) {
   const routeMarker = useRef(null);
   const lastSpokenStep = useRef(-1);
   const currentLocationMarker = useRef(null);
+
+  // 外部から呼び出せるメソッドを定義
+  useImperativeHandle(ref, () => ({
+    setDestinationFromUrl: async (destinationData) => {
+      try {
+        // 目的地を設定
+        const dest = {
+          lat: destinationData.lat,
+          lng: destinationData.lng,
+          name: destinationData.placeName || `座標: ${destinationData.lat}, ${destinationData.lng}`
+        };
+
+        setDestination(dest);
+
+        // マップを目的地に移動
+        if (map.current) {
+          map.current.flyTo({
+            center: [dest.lng, dest.lat],
+            zoom: 14,
+            duration: 2000
+          });
+
+          // マーカーを設定
+          if (routeMarker.current) {
+            routeMarker.current.setLngLat([dest.lng, dest.lat]);
+          } else {
+            routeMarker.current = new mapboxgl.Marker({ color: '#FF4444' })
+              .setLngLat([dest.lng, dest.lat])
+              .setPopup(new mapboxgl.Popup().setHTML(`<p class="font-bold">${dest.name}</p>`))
+              .addTo(map.current);
+          }
+
+          // 現在地が取得できていればルート検索
+          const storeState = useDeliveryStore.getState();
+          if (storeState.currentLocation) {
+            await searchRoute(storeState.currentLocation, dest);
+          } else {
+            console.log('現在位置が未取得のため、ルート検索をスキップ');
+          }
+        }
+      } catch (error) {
+        console.error('目的地設定エラー:', error);
+      }
+    }
+  }));
 
   useEffect(() => {
     if (map.current) return;
@@ -846,6 +891,6 @@ function Map({ onOpenSettings, onGeolocateReady }) {
       )}
     </div>
   );
-}
+});
 
 export default Map;

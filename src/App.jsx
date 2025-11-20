@@ -1,16 +1,18 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import Map from './components/Map';
 import ImageCropper from './components/ImageCropper';
 import useDeliveryStore from './stores/deliveryStore';
 import locationTracker from './services/locationTracker';
+import { handleExternalUrl } from './services/urlParser';
 
 function App() {
-  const { loadData, showTraffic, toggleTraffic, useTollRoads, toggleTollRoads, mapPitch, setMapPitch, voiceVolume, setVoiceVolume, currentLocationIcon, setCurrentLocationIcon } = useDeliveryStore();
+  const { loadData, showTraffic, toggleTraffic, useTollRoads, toggleTollRoads, mapPitch, setMapPitch, voiceVolume, setVoiceVolume, currentLocationIcon, setCurrentLocationIcon, setDestination } = useDeliveryStore();
   const [isLoading, setIsLoading] = useState(true);
   const [showSettings, setShowSettings] = useState(false);
   const [geolocateControl, setGeolocateControl] = useState(null);
   const [showImageCropper, setShowImageCropper] = useState(false);
   const [tempImageUrl, setTempImageUrl] = useState(null);
+  const mapRef = useRef(null);
 
   useEffect(() => {
     initApp();
@@ -21,12 +23,83 @@ function App() {
       // データ読み込み
       await loadData();
 
+      // Service Workerの登録
+      if ('serviceWorker' in navigator) {
+        try {
+          const registration = await navigator.serviceWorker.register('/service-worker.js');
+          console.log('Service Worker登録成功:', registration.scope);
+
+          // Service Workerからのメッセージを受信
+          navigator.serviceWorker.addEventListener('message', (event) => {
+            if (event.data && event.data.type === 'EXTERNAL_URL_RECEIVED') {
+              processExternalUrl(event.data.url);
+            }
+          });
+        } catch (error) {
+          console.error('Service Worker登録失敗:', error);
+        }
+      }
+
+      // URLパラメータをチェック
+      const urlParams = new URLSearchParams(window.location.search);
+      if (urlParams.has('intercepted')) {
+        const interceptedUrl = decodeURIComponent(urlParams.get('intercepted'));
+        processExternalUrl(interceptedUrl);
+        // URLパラメータをクリア
+        window.history.replaceState({}, '', window.location.pathname);
+      } else if (urlParams.has('shared')) {
+        const sharedUrl = decodeURIComponent(urlParams.get('shared'));
+        processExternalUrl(sharedUrl);
+        window.history.replaceState({}, '', window.location.pathname);
+      } else if (urlParams.has('url')) {
+        const url = decodeURIComponent(urlParams.get('url'));
+        processExternalUrl(url);
+        window.history.replaceState({}, '', window.location.pathname);
+      }
+
+      // グローバル関数として登録（Android/iOSからの呼び出し用）
+      window.handleExternalUrl = (url) => {
+        processExternalUrl(url);
+      };
+
       // 自動追跡開始
       await startAutoTracking();
     } catch (error) {
       console.error('初期化エラー:', error);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const processExternalUrl = async (url) => {
+    try {
+      console.log('外部URL処理:', url);
+
+      const mapboxToken = import.meta.env.VITE_MAPBOX_TOKEN;
+      const destination = await handleExternalUrl(url, mapboxToken);
+
+      if (destination) {
+        console.log('目的地設定:', destination);
+
+        // 目的地を設定
+        setDestination({
+          lat: destination.lat,
+          lng: destination.lng,
+          name: destination.placeName
+        });
+
+        // 地図を目的地に移動（Mapコンポーネントのrefが必要）
+        if (mapRef.current) {
+          mapRef.current.setDestinationFromUrl(destination);
+        }
+
+        // アラートで通知
+        alert(`目的地を設定しました:\n${destination.placeName || `座標: ${destination.lat}, ${destination.lng}`}`);
+      } else {
+        console.warn('URLから目的地を解析できませんでした:', url);
+      }
+    } catch (error) {
+      console.error('外部URL処理エラー:', error);
     }
   };
 
@@ -43,10 +116,11 @@ function App() {
   }
 
   return (
-    <div className="flex flex-col bg-gray-100" style={{ height: '100vh', height: '100dvh' }}>
+    <div className="flex flex-col bg-gray-100" style={{ height: '100dvh' }}>
       {/* メインコンテンツ */}
       <main className="flex-1 relative overflow-hidden" style={{ minHeight: 0 }}>
         <Map
+          ref={mapRef}
           onOpenSettings={() => setShowSettings(true)}
           onGeolocateReady={(geolocate) => setGeolocateControl(geolocate)}
         />
