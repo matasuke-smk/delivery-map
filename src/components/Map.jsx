@@ -11,6 +11,7 @@ const Map = forwardRef(({ onOpenSettings, onGeolocateReady }, ref) => {
   const [isOverviewMode, setIsOverviewMode] = React.useState(false);
   const [showRecenterButton, setShowRecenterButton] = React.useState(false);
   const [mapError, setMapError] = React.useState(null);
+  const [showHelp, setShowHelp] = React.useState(false);
   const userInteracted = useRef(false);
   const [compassHeading, setCompassHeading] = React.useState(null);
   const lastPosition = useRef(null);
@@ -326,19 +327,31 @@ const Map = forwardRef(({ onOpenSettings, onGeolocateReady }, ref) => {
         geolocate.trigger();
       });
 
-      // 地図クリックでルート検索
-      map.current.on('click', async (e) => {
-        // ナビ中は地図クリックを無視
+      // タッチイベント処理の変数
+      let touchStartTime = null;
+      let touchStartPosition = null;
+      let longPressTimer = null;
+      let isLongPress = false;
+      let lastTapTime = 0;
+      const LONG_PRESS_DURATION = 500; // 500ms以上で長押し
+      const DOUBLE_TAP_DELAY = 300; // 300ms以内でダブルタップ
+
+      // 長押しでピンを設置（目的地設定）
+      const handleLongPress = async (lngLat) => {
+        // ナビ中は長押しを無視
         const storeState = useDeliveryStore.getState();
         if (storeState.isNavigating) {
-          console.log('🔵 ナビ中のため地図クリックを無視');
+          console.log('🔵 ナビ中のため長押しを無視');
           return;
         }
 
-        const { lng, lat } = e.lngLat;
+        const { lng, lat } = lngLat;
+        console.log('🔵 長押し検出 - ピン設置:', { lat, lng });
 
-        console.log('🔵 地図クリック:', { lat, lng });
-        console.log('🔵 ストア内のcurrentLocation:', storeState.currentLocation);
+        // バイブレーション（対応デバイスのみ）
+        if ('vibrate' in navigator) {
+          navigator.vibrate(50);
+        }
 
         // 目的地マーカーを更新
         if (routeMarker.current) {
@@ -359,7 +372,114 @@ const Map = forwardRef(({ onOpenSettings, onGeolocateReady }, ref) => {
           console.warn('🔴 現在位置が取得できていません');
           alert('現在位置が取得できていません。位置情報を許可してから、地図の現在位置ボタンをクリックしてください。');
         }
-      });
+      };
+
+      // タップでピンをクリア
+      const handleSingleTap = () => {
+        console.log('🔵 タップ検出 - ピンクリア');
+
+        // 目的地マーカーをクリア
+        if (routeMarker.current) {
+          routeMarker.current.remove();
+          routeMarker.current = null;
+        }
+
+        // ルートをクリア
+        if (map.current.getSource('route')) {
+          map.current.getSource('route').setData({
+            type: 'FeatureCollection',
+            features: []
+          });
+        }
+
+        // ストアの情報をクリア
+        setDestination(null);
+        setCurrentRoute(null);
+        stopNavigation();
+      };
+
+      // マウス/タッチ開始イベント
+      const handlePointerDown = (e) => {
+        touchStartTime = Date.now();
+        touchStartPosition = e.lngLat;
+        isLongPress = false;
+
+        // 長押しタイマー開始
+        longPressTimer = setTimeout(() => {
+          isLongPress = true;
+          handleLongPress(touchStartPosition);
+        }, LONG_PRESS_DURATION);
+      };
+
+      // ドラッグ検出（長押しタイマーをキャンセル）
+      const handlePointerMove = (e) => {
+        if (touchStartPosition && longPressTimer) {
+          const dx = Math.abs(e.lngLat.lng - touchStartPosition.lng);
+          const dy = Math.abs(e.lngLat.lat - touchStartPosition.lat);
+
+          // 一定以上動いたらドラッグとみなす
+          if (dx > 0.0001 || dy > 0.0001) {
+            clearTimeout(longPressTimer);
+            longPressTimer = null;
+          }
+        }
+      };
+
+      // マウス/タッチ終了イベント
+      const handlePointerUp = (e) => {
+        const currentTime = Date.now();
+        const pressDuration = currentTime - touchStartTime;
+
+        // 長押しタイマーをクリア
+        if (longPressTimer) {
+          clearTimeout(longPressTimer);
+          longPressTimer = null;
+        }
+
+        // 長押しでない場合の処理
+        if (!isLongPress && pressDuration < LONG_PRESS_DURATION) {
+          // 位置が大きく動いていない場合（ドラッグではない）
+          if (touchStartPosition && e.lngLat) {
+            const dx = Math.abs(e.lngLat.lng - touchStartPosition.lng);
+            const dy = Math.abs(e.lngLat.lat - touchStartPosition.lat);
+
+            if (dx < 0.0001 && dy < 0.0001) {
+              // ダブルタップチェック
+              if (currentTime - lastTapTime < DOUBLE_TAP_DELAY) {
+                // ダブルタップは mapbox の標準機能でズームする
+                console.log('🔵 ダブルタップ検出 - ズーム');
+                lastTapTime = 0; // リセット
+              } else {
+                // シングルタップ
+                setTimeout(() => {
+                  if (lastTapTime === currentTime) {
+                    handleSingleTap();
+                  }
+                }, DOUBLE_TAP_DELAY);
+                lastTapTime = currentTime;
+              }
+            }
+          }
+        }
+
+        // リセット
+        touchStartTime = null;
+        touchStartPosition = null;
+        isLongPress = false;
+      };
+
+      // マウスイベント
+      map.current.on('mousedown', handlePointerDown);
+      map.current.on('mousemove', handlePointerMove);
+      map.current.on('mouseup', handlePointerUp);
+
+      // タッチイベント
+      map.current.on('touchstart', handlePointerDown);
+      map.current.on('touchmove', handlePointerMove);
+      map.current.on('touchend', handlePointerUp);
+
+      // ダブルクリック/タップでズーム（mapboxのデフォルト動作を活用）
+      map.current.doubleClickZoom.enable();
     } catch (error) {
       console.error('マップ初期化エラー:', error);
       setMapError(error.message || 'マップの初期化に失敗しました');
@@ -966,6 +1086,61 @@ const Map = forwardRef(({ onOpenSettings, onGeolocateReady }, ref) => {
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
         </svg>
       </button>
+
+      {/* ヘルプボタン（左上、設定の下） */}
+      <button
+        onClick={() => setShowHelp(true)}
+        className="absolute top-20 left-4 p-3 rounded-full bg-white shadow-lg hover:bg-gray-100 transition-colors z-10"
+      >
+        <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+      </button>
+
+      {/* ヘルプモーダル */}
+      {showHelp && (
+        <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg p-6 max-w-sm w-full">
+            <h3 className="text-xl font-bold mb-4 text-gray-800">地図の操作方法</h3>
+            <ul className="space-y-3 text-gray-700">
+              <li className="flex items-start gap-2">
+                <span className="text-blue-500 mt-1">📍</span>
+                <div>
+                  <p className="font-semibold">長押し（0.5秒）</p>
+                  <p className="text-sm text-gray-600">目的地にピンを設置してナビ開始</p>
+                </div>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-red-500 mt-1">🗑️</span>
+                <div>
+                  <p className="font-semibold">タップ</p>
+                  <p className="text-sm text-gray-600">ピンと経路をクリア</p>
+                </div>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-green-500 mt-1">🔍</span>
+                <div>
+                  <p className="font-semibold">ダブルタップ</p>
+                  <p className="text-sm text-gray-600">拡大・縮小</p>
+                </div>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-purple-500 mt-1">✋</span>
+                <div>
+                  <p className="font-semibold">ドラッグ</p>
+                  <p className="text-sm text-gray-600">地図を移動</p>
+                </div>
+              </li>
+            </ul>
+            <button
+              onClick={() => setShowHelp(false)}
+              className="mt-6 w-full py-3 bg-blue-500 text-white rounded-lg font-semibold hover:bg-blue-600 transition-colors"
+            >
+              閉じる
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* 現在位置に戻るボタン（ナビ中、スワイプ後のみ表示） */}
       {isNavigating && showRecenterButton && (
