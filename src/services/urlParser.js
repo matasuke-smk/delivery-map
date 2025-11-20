@@ -190,30 +190,13 @@ export const geocodeAddress = async (address, mapboxToken) => {
 
 /**
  * Overpass APIを使って建物名を取得
- * 段階的に検索範囲を広げて、より正確な結果を取得
+ * シンプルなクエリで確実に動作させる
  */
 export const getBuildingNameFromOSM = async (lat, lng) => {
   try {
-    // 優先度の高い順に検索（店舗・施設 > 建物 > その他POI）
-    const query = `
-      [out:json][timeout:15];
-      (
-        // 半径10m以内の店舗・施設（最優先）
-        node["shop"]["name"](around:10,${lat},${lng});
-        node["amenity"]["name"](around:10,${lat},${lng});
-        way["shop"]["name"](around:10,${lat},${lng});
-        way["amenity"]["name"](around:10,${lat},${lng});
-
-        // 半径30m以内の建物
-        node["building"]["name"](around:30,${lat},${lng});
-        way["building"]["name"](around:30,${lat},${lng});
-
-        // 半径50m以内のその他POI
-        node["name"](around:50,${lat},${lng});
-        way["name"](around:50,${lat},${lng});
-      );
-      out center 30;
-    `;
+    // シンプルなクエリ: 半径30m以内の名前付きノードとウェイ
+    const radius = 30;
+    const query = `[out:json][timeout:10];(node["name"](around:${radius},${lat},${lng});way["name"](around:${radius},${lat},${lng}););out center ${radius};`;
 
     console.log('🔍 OSM検索開始:', { lat, lng });
 
@@ -336,24 +319,56 @@ export const getBuildingNameFromOSM = async (lat, lng) => {
 
 /**
  * 座標から場所名を取得（リバースジオコーディング）
- * 優先順位: OSM建物名 > Mapbox POI > Mapbox住所
+ * 優先順位: Mapbox POI > OSM建物名 > Mapbox住所
  */
 export const reverseGeocode = async (lat, lng, mapboxToken) => {
-  // まずOSMから建物名を取得
+  console.log('🔍 リバースジオコーディング開始:', { lat, lng });
+
+  // まずMapboxでPOIを検索（最も確実）
   try {
+    console.log('📍 Mapbox POI検索開始...');
+    const response = await fetch(
+      `https://api.mapbox.com/geocoding/v5/mapbox.places/${lng},${lat}.json?access_token=${mapboxToken}&language=ja&types=poi&limit=5`
+    );
+
+    if (response.ok) {
+      const data = await response.json();
+      console.log('📦 Mapbox POI結果:', data.features?.length || 0, '件');
+
+      if (data.features && data.features.length > 0) {
+        // 最も近いPOIを使用
+        const poi = data.features[0];
+        const result = {
+          name: poi.text,
+          fullName: poi.place_name,
+          type: 'poi',
+          source: 'mapbox-poi'
+        };
+        console.log('✅ Mapbox POI取得成功:', result.name);
+        return result;
+      }
+    }
+  } catch (error) {
+    console.warn('⚠️ Mapbox POI検索エラー:', error);
+  }
+
+  // MapboxでPOIが見つからない場合、OSMを試す
+  try {
+    console.log('🏢 OSM検索開始...');
     const osmResult = await getBuildingNameFromOSM(lat, lng);
     if (osmResult) {
       console.log('✅ OSMから建物名取得:', osmResult.name);
       return osmResult;
     }
   } catch (error) {
-    console.warn('⚠️ OSM検索失敗、Mapboxにフォールバック');
+    console.warn('⚠️ OSM検索失敗:', error);
   }
 
-  // OSMで見つからない場合はMapboxにフォールバック
+  // 最後にMapboxで住所を取得
   try {
+    console.log('🏠 Mapbox住所検索開始...');
     const response = await fetch(
-      `https://api.mapbox.com/geocoding/v5/mapbox.places/${lng},${lat}.json?access_token=${mapboxToken}&language=ja&types=poi,address,place`
+      `https://api.mapbox.com/geocoding/v5/mapbox.places/${lng},${lat}.json?access_token=${mapboxToken}&language=ja&types=address,place&limit=1`
     );
 
     if (!response.ok) {
@@ -361,35 +376,23 @@ export const reverseGeocode = async (lat, lng, mapboxToken) => {
     }
 
     const data = await response.json();
+    console.log('📦 Mapbox住所結果:', data.features?.length || 0, '件');
 
     if (data.features && data.features.length > 0) {
-      // 最も関連性の高い結果を取得
       const feature = data.features[0];
-
-      // POI（店舗・施設）がある場合は優先的に使用
-      const poiFeature = data.features.find(f => f.place_type.includes('poi'));
-
-      if (poiFeature) {
-        return {
-          name: poiFeature.text,
-          fullName: poiFeature.place_name,
-          type: 'poi',
-          source: 'mapbox'
-        };
-      }
-
-      // POIがない場合は住所を使用
-      return {
+      const result = {
         name: feature.text,
         fullName: feature.place_name,
         type: feature.place_type[0],
-        source: 'mapbox'
+        source: 'mapbox-address'
       };
+      console.log('✅ Mapbox住所取得成功:', result.name);
+      return result;
     }
 
     return null;
   } catch (error) {
-    console.error('Reverse geocoding error:', error);
+    console.error('🔴 Reverse geocoding error:', error);
     return null;
   }
 };

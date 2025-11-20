@@ -370,16 +370,24 @@ const Map = forwardRef(({ onOpenSettings, onGeolocateReady }, ref) => {
 
         // リバースジオコーディングで場所名を取得
         let placeName = `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+        console.log('🎯 ピン設置位置:', { lat, lng });
+        console.log('🔑 Mapbox Token:', mapboxgl.accessToken ? '設定済み' : '未設定');
+
         try {
           const geocodeResult = await reverseGeocode(lat, lng, mapboxgl.accessToken);
+          console.log('🎁 reverseGeocode結果:', geocodeResult);
+
           if (geocodeResult) {
             placeName = geocodeResult.name || geocodeResult.fullName || placeName;
-            console.log('📍 場所名取得:', placeName);
+            console.log('✅ 場所名設定:', placeName, '(ソース:', geocodeResult.source, ')');
+          } else {
+            console.warn('⚠️ reverseGeocodeがnullを返しました');
           }
         } catch (error) {
-          console.warn('⚠️ リバースジオコーディングエラー:', error);
+          console.error('❌ リバースジオコーディングエラー:', error);
         }
 
+        console.log('💾 目的地として保存:', { lat, lng, name: placeName });
         setDestination({ lat, lng, name: placeName });
 
         // 現在位置がある場合はルート検索
