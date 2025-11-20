@@ -333,6 +333,9 @@ const Map = forwardRef(({ onOpenSettings, onGeolocateReady }, ref) => {
       let longPressTimer = null;
       let isLongPress = false;
       let lastTapTime = 0;
+      let tapCount = 0;
+      let doubleTapTimer = null;
+      let touchCount = 0; // マルチタッチ検出用
       const LONG_PRESS_DURATION = 500; // 500ms以上で長押し
       const DOUBLE_TAP_DELAY = 300; // 300ms以内でダブルタップ
 
@@ -376,30 +379,45 @@ const Map = forwardRef(({ onOpenSettings, onGeolocateReady }, ref) => {
 
       // タップでピンをクリア
       const handleSingleTap = () => {
-        console.log('🔵 タップ検出 - ピンクリア');
+        // ピンがある場合のみクリア
+        if (routeMarker.current || destination) {
+          console.log('🔵 タップ検出 - ピンクリア');
 
-        // 目的地マーカーをクリア
-        if (routeMarker.current) {
-          routeMarker.current.remove();
-          routeMarker.current = null;
+          // 目的地マーカーをクリア
+          if (routeMarker.current) {
+            routeMarker.current.remove();
+            routeMarker.current = null;
+          }
+
+          // ルートをクリア
+          if (map.current.getSource('route')) {
+            map.current.getSource('route').setData({
+              type: 'FeatureCollection',
+              features: []
+            });
+          }
+
+          // ストアの情報をクリア
+          setDestination(null);
+          setCurrentRoute(null);
+          stopNavigation();
         }
-
-        // ルートをクリア
-        if (map.current.getSource('route')) {
-          map.current.getSource('route').setData({
-            type: 'FeatureCollection',
-            features: []
-          });
-        }
-
-        // ストアの情報をクリア
-        setDestination(null);
-        setCurrentRoute(null);
-        stopNavigation();
       };
 
       // マウス/タッチ開始イベント
       const handlePointerDown = (e) => {
+        // マルチタッチの場合はスキップ（ピンチ操作）
+        if (e.originalEvent && e.originalEvent.touches && e.originalEvent.touches.length > 1) {
+          touchCount = e.originalEvent.touches.length;
+          // 長押しタイマーをクリア
+          if (longPressTimer) {
+            clearTimeout(longPressTimer);
+            longPressTimer = null;
+          }
+          return;
+        }
+
+        touchCount = 1;
         touchStartTime = Date.now();
         touchStartPosition = e.lngLat;
         isLongPress = false;
@@ -427,8 +445,14 @@ const Map = forwardRef(({ onOpenSettings, onGeolocateReady }, ref) => {
 
       // マウス/タッチ終了イベント
       const handlePointerUp = (e) => {
+        // マルチタッチ中はスキップ
+        if (touchCount > 1) {
+          touchCount = 0;
+          return;
+        }
+
         const currentTime = Date.now();
-        const pressDuration = currentTime - touchStartTime;
+        const pressDuration = touchStartTime ? currentTime - touchStartTime : 0;
 
         // 長押しタイマーをクリア
         if (longPressTimer) {
@@ -437,7 +461,7 @@ const Map = forwardRef(({ onOpenSettings, onGeolocateReady }, ref) => {
         }
 
         // 長押しでない場合の処理
-        if (!isLongPress && pressDuration < LONG_PRESS_DURATION) {
+        if (!isLongPress && pressDuration < LONG_PRESS_DURATION && pressDuration > 0) {
           // 位置が大きく動いていない場合（ドラッグではない）
           if (touchStartPosition && e.lngLat) {
             const dx = Math.abs(e.lngLat.lng - touchStartPosition.lng);
@@ -445,18 +469,32 @@ const Map = forwardRef(({ onOpenSettings, onGeolocateReady }, ref) => {
 
             if (dx < 0.0001 && dy < 0.0001) {
               // ダブルタップチェック
-              if (currentTime - lastTapTime < DOUBLE_TAP_DELAY) {
-                // ダブルタップは mapbox の標準機能でズームする
+              if (currentTime - lastTapTime < DOUBLE_TAP_DELAY && lastTapTime > 0) {
+                // ダブルタップ検出
                 console.log('🔵 ダブルタップ検出 - ズーム');
-                lastTapTime = 0; // リセット
+                if (doubleTapTimer) {
+                  clearTimeout(doubleTapTimer);
+                  doubleTapTimer = null;
+                }
+                lastTapTime = 0;
+                tapCount = 0;
               } else {
-                // シングルタップ
-                setTimeout(() => {
-                  if (lastTapTime === currentTime) {
+                // シングルタップの可能性
+                lastTapTime = currentTime;
+                tapCount = 1;
+
+                // ダブルタップ待機
+                if (doubleTapTimer) {
+                  clearTimeout(doubleTapTimer);
+                }
+                doubleTapTimer = setTimeout(() => {
+                  if (tapCount === 1) {
+                    // シングルタップ確定
                     handleSingleTap();
                   }
+                  tapCount = 0;
+                  doubleTapTimer = null;
                 }, DOUBLE_TAP_DELAY);
-                lastTapTime = currentTime;
               }
             }
           }
@@ -466,6 +504,7 @@ const Map = forwardRef(({ onOpenSettings, onGeolocateReady }, ref) => {
         touchStartTime = null;
         touchStartPosition = null;
         isLongPress = false;
+        touchCount = 0;
       };
 
       // マウスイベント
@@ -948,11 +987,15 @@ const Map = forwardRef(({ onOpenSettings, onGeolocateReady }, ref) => {
 
   // ナビゲーション中の位置追跡
   useEffect(() => {
-    if (!isNavigating || !currentRoute || !currentLocation) return;
+    if (!isNavigating || !currentRoute || !currentLocation || !destination) return;
 
-    const steps = currentRoute.legs[0].steps;
-    if (currentStepIndex >= steps.length) {
-      // 到着
+    // 目的地との距離を計算
+    const distanceToDestination = calculateDistance(currentLocation, destination);
+    console.log('🎯 目的地までの距離:', distanceToDestination.toFixed(1), 'm');
+
+    // 目的地まで50m以内なら到着と判定
+    if (distanceToDestination < 50) {
+      console.log('🎉 目的地に到着！');
       speak('目的地に到着しました');
       setTimeout(() => {
         // 音声停止
@@ -980,6 +1023,12 @@ const Map = forwardRef(({ onOpenSettings, onGeolocateReady }, ref) => {
         userInteracted.current = false;
         setShowRecenterButton(false);
       }, 2000);
+      return;
+    }
+
+    const steps = currentRoute.legs[0].steps;
+    if (currentStepIndex >= steps.length) {
+      // 全ステップ完了（フォールバック）
       return;
     }
 
@@ -1045,7 +1094,7 @@ const Map = forwardRef(({ onOpenSettings, onGeolocateReady }, ref) => {
         easing: (t) => t // リニア補間でスムーズに
       });
     }
-  }, [currentLocation, isNavigating, currentStepIndex, isOverviewMode, stopNavigation, mapPitch]);
+  }, [currentLocation, isNavigating, currentStepIndex, isOverviewMode, stopNavigation, mapPitch, destination]);
 
   return (
     <div className="w-full h-full relative">
@@ -1224,14 +1273,6 @@ const Map = forwardRef(({ onOpenSettings, onGeolocateReady }, ref) => {
                 {(currentRoute.distance / 1000).toFixed(1)} km
               </div>
             </div>
-
-            {/* クリアボタン */}
-            <button
-              onClick={handleClearRoute}
-              className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg font-bold hover:bg-gray-300 transition-colors"
-            >
-              クリア
-            </button>
 
             {/* 開始ボタン */}
             <button
