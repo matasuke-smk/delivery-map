@@ -930,6 +930,47 @@ const Map = forwardRef(({ onOpenSettings, onGeolocateReady }, ref) => {
     }
   };
 
+  const returnToUberApp = () => {
+    console.log('🚗 Uberドライバーアプリに戻ります...');
+
+    // Uberドライバーアプリのスキーム
+    const uberSchemes = [
+      'uber://',           // Uber一般
+      'uberdriver://',     // Uberドライバー
+      'ubereats://',       // Uber Eats配達員
+    ];
+
+    // 各スキームを試す
+    let schemeIndex = 0;
+    const tryScheme = () => {
+      if (schemeIndex < uberSchemes.length) {
+        const scheme = uberSchemes[schemeIndex];
+        console.log('試行中:', scheme);
+
+        // URLスキームで起動を試みる
+        window.location.href = scheme;
+
+        schemeIndex++;
+        // 次のスキームを試す（500ms後）
+        setTimeout(tryScheme, 500);
+      } else {
+        // すべて失敗した場合は、ブラウザバックを試みる
+        console.log('Uberアプリが見つかりませんでした');
+
+        // 履歴が存在する場合は戻る
+        if (window.history.length > 1) {
+          window.history.back();
+        } else {
+          // PWAの場合は通知を表示
+          alert('配達完了！\nUberドライバーアプリにお戻りください。');
+        }
+      }
+    };
+
+    // スキームの試行を開始
+    tryScheme();
+  };
+
   const handleStopNavigation = () => {
     // 音声停止
     if ('speechSynthesis' in window) {
@@ -996,32 +1037,51 @@ const Map = forwardRef(({ onOpenSettings, onGeolocateReady }, ref) => {
     // 目的地まで15m以内なら到着と判定
     if (distanceToDestination < 15) {
       console.log('🎉 目的地に到着！');
-      speak('目的地に到着しました');
+      speak('目的地に到着しました。お疲れ様でした。');
+
       setTimeout(() => {
         // 音声停止
         if ('speechSynthesis' in window) {
           window.speechSynthesis.cancel();
         }
 
-        // ナビ終了前にルート全体表示に戻す
-        if (map.current && currentRoute) {
-          const coordinates = currentRoute.geometry.coordinates;
-          const bounds = coordinates.reduce((bounds, coord) => {
-            return bounds.extend(coord);
-          }, new mapboxgl.LngLatBounds(coordinates[0], coordinates[0]));
+        // ピンとルートをクリア
+        if (routeMarker.current) {
+          routeMarker.current.remove();
+          routeMarker.current = null;
+        }
 
-          map.current.fitBounds(bounds, {
-            padding: { top: 80, bottom: 250, left: 50, right: 50 },
-            pitch: 0,
-            bearing: 0,
-            duration: 1000
+        // ルートをクリア
+        if (map.current && map.current.getSource('route')) {
+          map.current.getSource('route').setData({
+            type: 'FeatureCollection',
+            features: []
           });
         }
 
+        // 現在地を中心に表示
+        if (map.current && currentLocation) {
+          map.current.easeTo({
+            center: [currentLocation.lng, currentLocation.lat],
+            zoom: 15,
+            pitch: 0,
+            bearing: 0,
+            duration: 1500
+          });
+        }
+
+        // ストアの情報をクリア
+        setDestination(null);
+        setCurrentRoute(null);
         stopNavigation();
         lastSpokenStep.current = -1;
         userInteracted.current = false;
         setShowRecenterButton(false);
+
+        // Uberドライバーアプリに戻る
+        setTimeout(() => {
+          returnToUberApp();
+        }, 2000);
       }, 2000);
       return;
     }
