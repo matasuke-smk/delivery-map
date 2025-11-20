@@ -764,15 +764,17 @@ const Map = forwardRef(({ onOpenSettings, onGeolocateReady }, ref) => {
   // ルート検索関数（複数ルート対応 + バイクモード）
   const searchRoute = async (origin, destination) => {
     try {
-      const storeState = useDeliveryStore.getState();
-      const excludeParam = storeState.useTollRoads ? '' : '&exclude=toll';
+      // バイクモード（cyclingを使用して細い道も通れるように）
+      const url = `https://api.mapbox.com/directions/v5/mapbox/cycling/${origin.lng},${origin.lat};${destination.lng},${destination.lat}?geometries=geojson&access_token=${mapboxgl.accessToken}&language=ja&alternatives=true&steps=true&overview=full`;
 
-      // バイクモード（walkingを使用して細い道も通れるように）
-      const url = `https://api.mapbox.com/directions/v5/mapbox/walking/${origin.lng},${origin.lat};${destination.lng},${destination.lat}?geometries=geojson&access_token=${mapboxgl.accessToken}&language=ja&alternatives=true&steps=true&overview=full&max_speed=25${excludeParam}`;
-
-      console.log('🔍 ルート検索開始...');
+      console.log('🔍 ルート検索開始 (cyclingモード)...');
       const response = await fetch(url);
       const data = await response.json();
+
+      if (!response.ok) {
+        console.error('❌ ルート検索エラー:', response.status, data);
+        throw new Error(`Route request failed: ${response.status}`);
+      }
 
       if (data.routes && data.routes.length > 0) {
         console.log(`📍 ${data.routes.length}件のルート候補を取得`);
@@ -880,15 +882,15 @@ const Map = forwardRef(({ onOpenSettings, onGeolocateReady }, ref) => {
     );
   }, [showTraffic]);
 
-  // 有料道路設定変更時にルート再検索
-  useEffect(() => {
-    if (currentRoute && destination) {
-      const storeState = useDeliveryStore.getState();
-      if (storeState.currentLocation) {
-        searchRoute(storeState.currentLocation, destination);
-      }
-    }
-  }, [useTollRoads]);
+  // 有料道路設定はcyclingモードでは不要のためコメントアウト
+  // useEffect(() => {
+  //   if (currentRoute && destination) {
+  //     const storeState = useDeliveryStore.getState();
+  //     if (storeState.currentLocation) {
+  //       searchRoute(storeState.currentLocation, destination);
+  //     }
+  //   }
+  // }, [useTollRoads]);
 
   // 店舗マーカー更新
   useEffect(() => {
