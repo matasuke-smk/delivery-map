@@ -738,25 +738,34 @@ const Map = forwardRef(({ onOpenSettings, onGeolocateReady }, ref) => {
     }
 
     const routeCoords = route.geometry.coordinates;
-    const ROUTE_PROXIMITY = 0.0001; // 約10m - ルートに近い信号を検出
-    const SIGNAL_GROUPING = 0.0003; // 約30m - 同じ交差点内の信号をグループ化
+    const ROUTE_PROXIMITY = 0.0002; // 約20m - ルートに近い信号を検出
 
-    // ステップ1: ルート上の信号を全て収集
+    // ステップ1: ルート上の信号を収集し、ルート上の位置を記録
     const signalsOnRoute = [];
     signalData.features.forEach(signal => {
       const signalCoord = signal.geometry.coordinates;
+      let minDistance = Infinity;
+      let nearestIndex = -1;
 
-      // ルートに近い信号だけを収集
-      for (let coord of routeCoords) {
+      // ルート上で最も近い位置を見つける
+      routeCoords.forEach((coord, index) => {
         const distance = Math.sqrt(
           Math.pow(coord[0] - signalCoord[0], 2) +
           Math.pow(coord[1] - signalCoord[1], 2)
         );
 
-        if (distance < ROUTE_PROXIMITY) {
-          signalsOnRoute.push(signalCoord);
-          break;
+        if (distance < minDistance) {
+          minDistance = distance;
+          nearestIndex = index;
         }
+      });
+
+      // ルートに近い信号だけを収集
+      if (minDistance < ROUTE_PROXIMITY) {
+        signalsOnRoute.push({
+          coord: signalCoord,
+          routeIndex: nearestIndex
+        });
       }
     });
 
@@ -764,43 +773,21 @@ const Map = forwardRef(({ onOpenSettings, onGeolocateReady }, ref) => {
       return 0;
     }
 
-    // ステップ2: 信号をグループ化（クラスタリング）
-    const grouped = new Array(signalsOnRoute.length).fill(false);
+    // ステップ2: ルート順にソート
+    signalsOnRoute.sort((a, b) => a.routeIndex - b.routeIndex);
+
+    // ステップ3: ルート上で近い信号をグループ化
     let intersectionCount = 0;
+    let lastRouteIndex = -100;
 
-    for (let i = 0; i < signalsOnRoute.length; i++) {
-      if (grouped[i]) continue;
-
-      // 新しい交差点グループを作成
-      const cluster = [i];
-      grouped[i] = true;
-      let clusterChanged = true;
-
-      // クラスタを拡張（近い信号を全て追加）
-      while (clusterChanged) {
-        clusterChanged = false;
-        for (let j = 0; j < signalsOnRoute.length; j++) {
-          if (grouped[j]) continue;
-
-          // クラスタ内のいずれかの信号に近いかチェック
-          for (let clusterIndex of cluster) {
-            const distance = Math.sqrt(
-              Math.pow(signalsOnRoute[j][0] - signalsOnRoute[clusterIndex][0], 2) +
-              Math.pow(signalsOnRoute[j][1] - signalsOnRoute[clusterIndex][1], 2)
-            );
-
-            if (distance < SIGNAL_GROUPING) {
-              cluster.push(j);
-              grouped[j] = true;
-              clusterChanged = true;
-              break;
-            }
-          }
-        }
+    signalsOnRoute.forEach(signal => {
+      // ルート上で離れていれば新しい交差点
+      if (signal.routeIndex - lastRouteIndex > 10) {
+        intersectionCount++;
+        lastRouteIndex = signal.routeIndex;
       }
-
-      intersectionCount++;
-    }
+      // ルート上で近ければ同じ交差点（何もしない）
+    });
 
     return intersectionCount;
   };
