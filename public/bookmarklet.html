@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>配達マップ - URLインポートツール</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #0066CC;
+            font-size: 24px;
+            margin-bottom: 10px;
+        }
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+        }
+        .section {
+            margin-bottom: 30px;
+            padding: 20px;
+            background: #f9f9f9;
+            border-radius: 8px;
+        }
+        .section h2 {
+            color: #333;
+            font-size: 18px;
+            margin-bottom: 15px;
+        }
+        .bookmarklet-button {
+            display: inline-block;
+            padding: 12px 24px;
+            background: #0066CC;
+            color: white;
+            text-decoration: none;
+            border-radius: 8px;
+            font-weight: bold;
+            cursor: move;
+            transition: transform 0.2s;
+        }
+        .bookmarklet-button:hover {
+            transform: scale(1.05);
+            background: #0052a3;
+        }
+        .url-input {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 14px;
+            box-sizing: border-box;
+        }
+        .url-input:focus {
+            outline: none;
+            border-color: #0066CC;
+        }
+        .submit-button {
+            width: 100%;
+            padding: 14px;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+        .submit-button:hover {
+            background: #45a049;
+        }
+        .instructions {
+            background: #fff3cd;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            border-left: 4px solid #ffc107;
+        }
+        .step {
+            margin: 10px 0;
+            padding-left: 25px;
+            position: relative;
+        }
+        .step::before {
+            content: attr(data-step);
+            position: absolute;
+            left: 0;
+            background: #0066CC;
+            color: white;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            text-align: center;
+            line-height: 20px;
+            font-size: 12px;
+        }
+        .example {
+            background: #e8f4f8;
+            padding: 10px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 12px;
+            word-break: break-all;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🗺️ 配達マップ URLインポートツール</h1>
+        <p class="subtitle">UberドライバーアプリのGoogleマップURLを配達マップで開きます</p>
+
+        <div class="instructions">
+            <strong>⚠️ PWAでは直接URLインターセプトはできません</strong><br>
+            以下の方法でURLを配達マップに送信してください。
+        </div>
+
+        <!-- 方法1: ブックマークレット -->
+        <div class="section">
+            <h2>📌 方法1: ブックマークレット（推奨）</h2>
+            <div class="step" data-step="1">下のボタンをブックマークバーにドラッグ</div>
+            <div class="step" data-step="2">UberアプリでURLをコピー</div>
+            <div class="step" data-step="3">ブックマークをクリックして実行</div>
+
+            <div style="text-align: center; margin-top: 20px;">
+                <a href="javascript:(function(){const url=prompt('GoogleマップのURLを貼り付けてください:');if(url)window.location.href='https://matasuke-smk.github.io/delivery-map/?url='+encodeURIComponent(url);})();"
+                   class="bookmarklet-button">
+                    🚀 配達マップで開く
+                </a>
+            </div>
+            <p style="text-align: center; color: #666; font-size: 12px; margin-top: 10px;">
+                ↑ このボタンをブックマークバーにドラッグ＆ドロップ
+            </p>
+        </div>
+
+        <!-- 方法2: 直接入力 -->
+        <div class="section">
+            <h2>📝 方法2: URL直接入力</h2>
+            <form id="urlForm">
+                <input type="text"
+                       class="url-input"
+                       id="urlInput"
+                       placeholder="GoogleマップのURLを貼り付け（例: https://www.google.com/maps/dir/?api=1&destination=...）"
+                       required>
+                <button type="submit" class="submit-button">配達マップで開く</button>
+            </form>
+
+            <div class="example">
+                <strong>例:</strong> https://www.google.com/maps/dir/?api=1&destination=34.94944,135.75644&avoid=highways
+            </div>
+        </div>
+
+        <!-- 使い方 -->
+        <div class="section">
+            <h2>💡 使い方</h2>
+            <ol style="line-height: 1.8;">
+                <li><strong>Uberドライバーアプリ</strong>で配達先の地図を開く</li>
+                <li>ブラウザが開いたら<strong>URLをコピー</strong></li>
+                <li>上記のいずれかの方法で<strong>配達マップに送信</strong></li>
+                <li>自動的に目的地が設定され、ナビゲーション開始</li>
+            </ol>
+        </div>
+
+        <!-- 注意事項 -->
+        <div class="section" style="background: #fff0f0;">
+            <h2>📱 モバイルユーザーへ</h2>
+            <p>最高の体験のために、<strong>Androidアプリ版</strong>の使用を推奨します：</p>
+            <ul>
+                <li>自動的にGoogleマップURLをインターセプト</li>
+                <li>コピー＆ペースト不要</li>
+                <li>「配達マップで開く」が選択肢に表示</li>
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        // フォーム送信処理
+        document.getElementById('urlForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const url = document.getElementById('urlInput').value;
+            if (url) {
+                window.location.href = '/delivery-map/?url=' + encodeURIComponent(url);
+            }
+        });
+
+        // ページロード時にURLパラメータをチェック
+        window.addEventListener('DOMContentLoaded', function() {
+            const params = new URLSearchParams(window.location.search);
+            if (params.has('url')) {
+                // 既にURLパラメータがある場合は、メインアプリにリダイレクト
+                window.location.href = '/delivery-map/?url=' + params.get('url');
+            }
+        });
+    </script>
+</body>
+</html>
