@@ -189,6 +189,51 @@ export const geocodeAddress = async (address, mapboxToken) => {
 };
 
 /**
+ * 座標から場所名を取得（リバースジオコーディング）
+ */
+export const reverseGeocode = async (lat, lng, mapboxToken) => {
+  try {
+    const response = await fetch(
+      `https://api.mapbox.com/geocoding/v5/mapbox.places/${lng},${lat}.json?access_token=${mapboxToken}&language=ja&types=poi,address,place`
+    );
+
+    if (!response.ok) {
+      throw new Error('Reverse geocoding failed');
+    }
+
+    const data = await response.json();
+
+    if (data.features && data.features.length > 0) {
+      // 最も関連性の高い結果を取得
+      const feature = data.features[0];
+
+      // POI（店舗・施設）がある場合は優先的に使用
+      const poiFeature = data.features.find(f => f.place_type.includes('poi'));
+
+      if (poiFeature) {
+        return {
+          name: poiFeature.text,
+          fullName: poiFeature.place_name,
+          type: 'poi'
+        };
+      }
+
+      // POIがない場合は住所を使用
+      return {
+        name: feature.text,
+        fullName: feature.place_name,
+        type: feature.place_type[0]
+      };
+    }
+
+    return null;
+  } catch (error) {
+    console.error('Reverse geocoding error:', error);
+    return null;
+  }
+};
+
+/**
  * 外部URLを処理して目的地を設定
  */
 export const handleExternalUrl = async (url, mapboxToken) => {

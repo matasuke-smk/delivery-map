@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, forwardRef, useImperativeHandle } from 'react';
 import mapboxgl from 'mapbox-gl';
 import useDeliveryStore from '../stores/deliveryStore';
+import { reverseGeocode } from '../services/urlParser';
 
 // Mapboxトークン設定
 mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN || '';
@@ -365,7 +366,19 @@ const Map = forwardRef(({ onOpenSettings, onGeolocateReady }, ref) => {
           .setLngLat([lng, lat])
           .addTo(map.current);
 
-        setDestination({ lat, lng });
+        // リバースジオコーディングで場所名を取得
+        let placeName = `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+        try {
+          const geocodeResult = await reverseGeocode(lat, lng, mapboxgl.accessToken);
+          if (geocodeResult) {
+            placeName = geocodeResult.name || geocodeResult.fullName || placeName;
+            console.log('📍 場所名取得:', placeName);
+          }
+        } catch (error) {
+          console.warn('⚠️ リバースジオコーディングエラー:', error);
+        }
+
+        setDestination({ lat, lng, name: placeName });
 
         // 現在位置がある場合はルート検索
         if (storeState.currentLocation && storeState.currentLocation.lat && storeState.currentLocation.lng) {
@@ -379,6 +392,13 @@ const Map = forwardRef(({ onOpenSettings, onGeolocateReady }, ref) => {
 
       // タップでピンをクリア
       const handleSingleTap = () => {
+        // ナビ中はタップを無視
+        const storeState = useDeliveryStore.getState();
+        if (storeState.isNavigating) {
+          console.log('🔵 ナビ中のためタップを無視');
+          return;
+        }
+
         // ピンがある場合のみクリア
         if (routeMarker.current || destination) {
           console.log('🔵 タップ検出 - ピンクリア');
