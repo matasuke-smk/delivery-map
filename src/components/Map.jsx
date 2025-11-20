@@ -10,6 +10,7 @@ const Map = forwardRef(({ onOpenSettings, onGeolocateReady }, ref) => {
   const map = useRef(null);
   const [isOverviewMode, setIsOverviewMode] = React.useState(false);
   const [showRecenterButton, setShowRecenterButton] = React.useState(false);
+  const [mapError, setMapError] = React.useState(null);
   const userInteracted = useRef(false);
   const [compassHeading, setCompassHeading] = React.useState(null);
   const lastPosition = useRef(null);
@@ -27,6 +28,7 @@ const Map = forwardRef(({ onOpenSettings, onGeolocateReady }, ref) => {
     currentStepIndex,
     startNavigation,
     stopNavigation,
+    clearRoute,
     setCurrentStepIndex,
     setCurrentLocation,
     mapPitch,
@@ -193,6 +195,133 @@ const Map = forwardRef(({ onOpenSettings, onGeolocateReady }, ref) => {
           }
         });
 
+        // 交通標識用のアイコンを作成
+        const createIcon = (text, bgColor, textColor = '#FFFFFF') => {
+          const size = 48; // サイズを48x48に統一
+          const canvas = document.createElement('canvas');
+          canvas.width = size;
+          canvas.height = size;
+          const ctx = canvas.getContext('2d');
+
+          // 背景円
+          ctx.fillStyle = bgColor;
+          ctx.beginPath();
+          ctx.arc(size / 2, size / 2, size / 2 - 4, 0, 2 * Math.PI);
+          ctx.fill();
+
+          // 白枠
+          ctx.strokeStyle = '#FFFFFF';
+          ctx.lineWidth = 3;
+          ctx.stroke();
+
+          // テキスト
+          ctx.fillStyle = textColor;
+          ctx.font = 'bold 20px sans-serif';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(text, size / 2, size / 2);
+
+          // CanvasをImageDataに変換
+          return ctx.getImageData(0, 0, size, size);
+        };
+
+        // アイコンを登録（信号のみ）
+        map.current.addImage('traffic-signal-icon', createIcon('信', '#FF9800'), { pixelRatio: 1 });
+
+        // 交通標識データ用のソースを追加
+        map.current.addSource('traffic-signs', {
+          type: 'geojson',
+          data: {
+            type: 'FeatureCollection',
+            features: []
+          }
+        });
+
+        // 信号機レイヤー
+        map.current.addLayer({
+          id: 'traffic-signals',
+          type: 'symbol',
+          source: 'traffic-signs',
+          filter: ['==', ['get', 'type'], 'traffic_signals'],
+          layout: {
+            'icon-image': 'traffic-signal-icon',
+            'icon-size': 0.6,
+            'icon-allow-overlap': true
+          },
+          minzoom: 14 // ズームレベル14以上で表示
+        });
+
+        // Overpass APIから交通標識データを取得
+        const fetchTrafficSigns = async () => {
+          if (!map.current) return;
+
+          // ズームレベルが14未満の場合は取得しない
+          const zoom = map.current.getZoom();
+          if (zoom < 14) {
+            console.log('🚦 ズームレベルが低いため信号を非表示');
+            const source = map.current.getSource('traffic-signs');
+            if (source) {
+              source.setData({ type: 'FeatureCollection', features: [] });
+            }
+            return;
+          }
+
+          const bounds = map.current.getBounds();
+          const bbox = `${bounds.getSouth()},${bounds.getWest()},${bounds.getNorth()},${bounds.getEast()}`;
+
+          // 信号機のみ取得
+          const query = `[out:json][bbox:${bbox}][timeout:10];node["highway"="traffic_signals"];out body 500;`;
+
+          try {
+            console.log('🚦 信号データ取得開始');
+            const response = await fetch('https://overpass-api.de/api/interpreter', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/x-www-form-urlencoded'
+              },
+              body: `data=${encodeURIComponent(query)}`
+            });
+
+            if (!response.ok) {
+              throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            const data = await response.json();
+            console.log(`🚦 信号取得完了: ${data.elements.length}件`);
+
+            const features = data.elements.map(element => ({
+              type: 'Feature',
+              geometry: {
+                type: 'Point',
+                coordinates: [element.lon, element.lat]
+              },
+              properties: {
+                type: 'traffic_signals'
+              }
+            }));
+
+            const source = map.current.getSource('traffic-signs');
+            if (source) {
+              source.setData({
+                type: 'FeatureCollection',
+                features: features
+              });
+            }
+          } catch (error) {
+            console.error('🔴 信号データの取得に失敗:', error);
+          }
+        };
+
+        // 初回読み込み
+        fetchTrafficSigns();
+
+        // 地図移動時に更新（デバウンス付き）
+        let fetchTimeout;
+        map.current.on('moveend', () => {
+          clearTimeout(fetchTimeout);
+          fetchTimeout = setTimeout(fetchTrafficSigns, 500);
+        });
+
         // デフォルトで位置情報を取得
         geolocate.trigger();
       });
@@ -233,6 +362,7 @@ const Map = forwardRef(({ onOpenSettings, onGeolocateReady }, ref) => {
       });
     } catch (error) {
       console.error('マップ初期化エラー:', error);
+      setMapError(error.message || 'マップの初期化に失敗しました');
     }
   }, []);
 
@@ -647,29 +777,52 @@ const Map = forwardRef(({ onOpenSettings, onGeolocateReady }, ref) => {
       window.speechSynthesis.cancel();
     }
 
+    // ナビ終了前にルート全体表示に戻す
+    if (map.current && currentRoute) {
+      const coordinates = currentRoute.geometry.coordinates;
+      const bounds = coordinates.reduce((bounds, coord) => {
+        return bounds.extend(coord);
+      }, new mapboxgl.LngLatBounds(coordinates[0], coordinates[0]));
+
+      map.current.fitBounds(bounds, {
+        padding: { top: 80, bottom: 250, left: 50, right: 50 },
+        pitch: 0,
+        bearing: 0,
+        duration: 1000
+      });
+    }
+
     stopNavigation();
     lastSpokenStep.current = -1;
     userInteracted.current = false;
     setShowRecenterButton(false);
+  };
 
-    // カメラをリセット
+  const handleClearRoute = () => {
+    // 音声停止
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+    }
+
+    clearRoute();
+    lastSpokenStep.current = -1;
+    userInteracted.current = false;
+    setShowRecenterButton(false);
+
+    // ルートマーカーを削除
     if (map.current && routeMarker.current) {
       routeMarker.current.remove();
       routeMarker.current = null;
     }
-    if (map.current && map.current.getSource('route')) {
-      map.current.removeLayer('route');
-      map.current.removeSource('route');
-    }
 
-    // カメラを通常視点に
+    // ルートレイヤーを削除
     if (map.current) {
-      map.current.easeTo({
-        pitch: 0,
-        bearing: 0,
-        padding: { top: 0, bottom: 0, left: 0, right: 0 },
-        duration: 1000
-      });
+      if (map.current.getLayer('route')) {
+        map.current.removeLayer('route');
+      }
+      if (map.current.getSource('route')) {
+        map.current.removeSource('route');
+      }
     }
   };
 
@@ -686,25 +839,26 @@ const Map = forwardRef(({ onOpenSettings, onGeolocateReady }, ref) => {
         if ('speechSynthesis' in window) {
           window.speechSynthesis.cancel();
         }
-        stopNavigation();
 
-        // カメラリセット
-        if (map.current && routeMarker.current) {
-          routeMarker.current.remove();
-          routeMarker.current = null;
-        }
-        if (map.current && map.current.getSource('route')) {
-          map.current.removeLayer('route');
-          map.current.removeSource('route');
-        }
-        if (map.current) {
-          map.current.easeTo({
+        // ナビ終了前にルート全体表示に戻す
+        if (map.current && currentRoute) {
+          const coordinates = currentRoute.geometry.coordinates;
+          const bounds = coordinates.reduce((bounds, coord) => {
+            return bounds.extend(coord);
+          }, new mapboxgl.LngLatBounds(coordinates[0], coordinates[0]));
+
+          map.current.fitBounds(bounds, {
+            padding: { top: 80, bottom: 250, left: 50, right: 50 },
             pitch: 0,
             bearing: 0,
-            padding: { top: 0, bottom: 0, left: 0, right: 0 },
             duration: 1000
           });
         }
+
+        stopNavigation();
+        lastSpokenStep.current = -1;
+        userInteracted.current = false;
+        setShowRecenterButton(false);
       }, 2000);
       return;
     }
@@ -776,6 +930,31 @@ const Map = forwardRef(({ onOpenSettings, onGeolocateReady }, ref) => {
   return (
     <div className="w-full h-full relative">
       <div ref={mapContainer} className="w-full h-full" />
+
+      {/* マップエラー表示 */}
+      {mapError && (
+        <div className="absolute inset-0 bg-gray-900 bg-opacity-95 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md mx-4 text-center">
+            <div className="text-red-500 text-5xl mb-4">⚠️</div>
+            <h3 className="text-xl font-bold text-gray-900 mb-2">マップを読み込めません</h3>
+            <p className="text-gray-600 mb-4">{mapError}</p>
+            <div className="text-sm text-gray-500 mb-4">
+              <p>以下を確認してください：</p>
+              <ul className="list-disc list-inside text-left mt-2">
+                <li>ブラウザがWebGLをサポートしているか</li>
+                <li>ハードウェアアクセラレーションが有効か</li>
+                <li>別のブラウザで試してみる</li>
+              </ul>
+            </div>
+            <button
+              onClick={() => window.location.reload()}
+              className="px-6 py-3 bg-blue-500 text-white rounded-lg font-semibold hover:bg-blue-600 transition-colors"
+            >
+              再読み込み
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* 設定アイコン（左上） */}
       <button
@@ -870,6 +1049,14 @@ const Map = forwardRef(({ onOpenSettings, onGeolocateReady }, ref) => {
                 {(currentRoute.distance / 1000).toFixed(1)} km
               </div>
             </div>
+
+            {/* クリアボタン */}
+            <button
+              onClick={handleClearRoute}
+              className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg font-bold hover:bg-gray-300 transition-colors"
+            >
+              クリア
+            </button>
 
             {/* 開始ボタン */}
             <button
