@@ -724,7 +724,7 @@ const Map = forwardRef(({ onOpenSettings, onGeolocateReady }, ref) => {
     }
   }, [currentLocation, currentLocationIcon]);
 
-  // ルート上の信号数をカウント
+  // ルート上の信号数をカウント（交差点単位でグループ化）
   const countTrafficSignals = (route) => {
     if (!map.current || !map.current.getSource('traffic-signs')) {
       return 0;
@@ -738,27 +738,71 @@ const Map = forwardRef(({ onOpenSettings, onGeolocateReady }, ref) => {
     }
 
     const routeCoords = route.geometry.coordinates;
-    let signalCount = 0;
-    const PROXIMITY_THRESHOLD = 0.0001; // 約10m
+    const ROUTE_PROXIMITY = 0.0001; // 約10m - ルートに近い信号を検出
+    const SIGNAL_GROUPING = 0.0003; // 約30m - 同じ交差点内の信号をグループ化
 
+    // ステップ1: ルート上の信号を全て収集
+    const signalsOnRoute = [];
     signalData.features.forEach(signal => {
       const signalCoord = signal.geometry.coordinates;
 
-      // ルートの各座標から最も近い距離を計算
+      // ルートに近い信号だけを収集
       for (let coord of routeCoords) {
         const distance = Math.sqrt(
           Math.pow(coord[0] - signalCoord[0], 2) +
           Math.pow(coord[1] - signalCoord[1], 2)
         );
 
-        if (distance < PROXIMITY_THRESHOLD) {
-          signalCount++;
+        if (distance < ROUTE_PROXIMITY) {
+          signalsOnRoute.push(signalCoord);
           break;
         }
       }
     });
 
-    return signalCount;
+    if (signalsOnRoute.length === 0) {
+      return 0;
+    }
+
+    // ステップ2: 信号をグループ化（クラスタリング）
+    const grouped = new Array(signalsOnRoute.length).fill(false);
+    let intersectionCount = 0;
+
+    for (let i = 0; i < signalsOnRoute.length; i++) {
+      if (grouped[i]) continue;
+
+      // 新しい交差点グループを作成
+      const cluster = [i];
+      grouped[i] = true;
+      let clusterChanged = true;
+
+      // クラスタを拡張（近い信号を全て追加）
+      while (clusterChanged) {
+        clusterChanged = false;
+        for (let j = 0; j < signalsOnRoute.length; j++) {
+          if (grouped[j]) continue;
+
+          // クラスタ内のいずれかの信号に近いかチェック
+          for (let clusterIndex of cluster) {
+            const distance = Math.sqrt(
+              Math.pow(signalsOnRoute[j][0] - signalsOnRoute[clusterIndex][0], 2) +
+              Math.pow(signalsOnRoute[j][1] - signalsOnRoute[clusterIndex][1], 2)
+            );
+
+            if (distance < SIGNAL_GROUPING) {
+              cluster.push(j);
+              grouped[j] = true;
+              clusterChanged = true;
+              break;
+            }
+          }
+        }
+      }
+
+      intersectionCount++;
+    }
+
+    return intersectionCount;
   };
 
   // ルート検索関数（複数ルート対応 + バイクモード）
