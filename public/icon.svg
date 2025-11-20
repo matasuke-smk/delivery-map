@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- Background -->
+  <rect width="512" height="512" rx="64" fill="#0066CC"/>
+
+  <!-- Map Pin Icon -->
+  <g transform="translate(256, 230)">
+    <path d="M0-130c-71.8 0-130 58.2-130 130 0 25.8 7.5 49.8 20.5 70L0 200l109.5-130c13-20.2 20.5-44.2 20.5-70 0-71.8-58.2-130-130-130z"
+          fill="#ffffff" opacity="0.9"/>
+    <circle cx="0" cy="0" r="45" fill="#0066CC"/>
+    <circle cx="0" cy="0" r="25" fill="#ffffff"/>
+  </g>
+
+  <!-- Map Lines -->
+  <path d="M80 350 L200 380 L320 340 L432 370" stroke="#ffffff" stroke-width="8" fill="none" opacity="0.6"/>
+  <path d="M80 400 L200 430 L320 390 L432 420" stroke="#ffffff" stroke-width="8" fill="none" opacity="0.4"/>
+
+  <!-- Delivery Text (配達) -->
+  <text x="256" y="470" font-family="Arial, sans-serif" font-size="48" font-weight="bold" fill="#ffffff" text-anchor="middle">配達マップ</text>
+</svg>

@@ -2,9 +2,9 @@
 
 const CACHE_NAME = 'delivery-map-v1';
 const urlsToCache = [
-  '/',
-  '/index.html',
-  '/manifest.json'
+  '/delivery-map/',
+  '/delivery-map/index.html',
+  '/delivery-map/manifest.json'
 ];
 
 // Install event
@@ -53,7 +53,7 @@ self.addEventListener('fetch', (event) => {
 
     // URLから座標や場所情報を抽出してリダイレクト
     event.respondWith(
-      Response.redirect('/?intercepted=' + encodeURIComponent(event.request.url), 302)
+      Response.redirect('/delivery-map/?intercepted=' + encodeURIComponent(event.request.url), 302)
     );
     return;
   }
@@ -91,12 +91,12 @@ self.addEventListener('message', (event) => {
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
 
-  if (url.pathname === '/' && url.searchParams.has('url')) {
+  if (url.pathname === '/delivery-map/' && url.searchParams.has('url')) {
     // Share TargetからのURL受信
     const sharedUrl = url.searchParams.get('url');
 
     event.respondWith(
-      Response.redirect('/?shared=' + encodeURIComponent(sharedUrl), 302)
+      Response.redirect('/delivery-map/?shared=' + encodeURIComponent(sharedUrl), 302)
     );
   }
 });

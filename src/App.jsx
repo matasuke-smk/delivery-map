@@ -26,7 +26,9 @@ function App() {
       // Service Workerの登録
       if ('serviceWorker' in navigator) {
         try {
-          const registration = await navigator.serviceWorker.register('/service-worker.js');
+          // 本番環境（GitHub Pages）と開発環境でパスを切り替え
+          const swPath = import.meta.env.BASE_URL + 'service-worker.js';
+          const registration = await navigator.serviceWorker.register(swPath);
           console.log('Service Worker登録成功:', registration.scope);
 
           // Service Workerからのメッセージを受信
