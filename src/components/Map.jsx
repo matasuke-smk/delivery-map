@@ -331,6 +331,7 @@ const Map = forwardRef(({ onOpenSettings, onGeolocateReady }, ref) => {
       // タッチイベント処理の変数
       let touchStartTime = null;
       let touchStartPosition = null;
+      let touchStartPixel = null; // スクリーン座標（ピクセル）
       let longPressTimer = null;
       let isLongPress = false;
       let lastTapTime = 0;
@@ -339,6 +340,7 @@ const Map = forwardRef(({ onOpenSettings, onGeolocateReady }, ref) => {
       let touchCount = 0; // マルチタッチ検出用
       const LONG_PRESS_DURATION = 500; // 500ms以上で長押し
       const DOUBLE_TAP_DELAY = 300; // 300ms以内でダブルタップ
+      const DRAG_THRESHOLD_PX = 10; // 10ピクセル以上移動したらドラッグ
 
       // 長押しでピンを設置（目的地設定）
       const handleLongPress = async (lngLat) => {
@@ -440,7 +442,10 @@ const Map = forwardRef(({ onOpenSettings, onGeolocateReady }, ref) => {
         touchCount = 1;
         touchStartTime = Date.now();
         touchStartPosition = e.lngLat;
+        touchStartPixel = e.point; // スクリーン座標を保存
         isLongPress = false;
+
+        console.log('👆 タッチ開始:', touchStartPixel);
 
         // 長押しタイマー開始
         longPressTimer = setTimeout(() => {
@@ -461,12 +466,15 @@ const Map = forwardRef(({ onOpenSettings, onGeolocateReady }, ref) => {
           return;
         }
 
-        if (touchStartPosition && longPressTimer) {
-          const dx = Math.abs(e.lngLat.lng - touchStartPosition.lng);
-          const dy = Math.abs(e.lngLat.lat - touchStartPosition.lat);
+        if (touchStartPixel && longPressTimer) {
+          // ピクセル単位で移動距離を計算
+          const dx = Math.abs(e.point.x - touchStartPixel.x);
+          const dy = Math.abs(e.point.y - touchStartPixel.y);
+          const distance = Math.sqrt(dx * dx + dy * dy);
 
-          // 一定以上動いたらドラッグとみなす（閾値を大きく設定してズーム操作を考慮）
-          if (dx > 0.001 || dy > 0.001) {
+          // 10ピクセル以上動いたらドラッグとみなす
+          if (distance > DRAG_THRESHOLD_PX) {
+            console.log('🚫 ドラッグ検出:', distance.toFixed(1), 'px - 長押しキャンセル');
             clearTimeout(longPressTimer);
             longPressTimer = null;
           }
@@ -493,11 +501,15 @@ const Map = forwardRef(({ onOpenSettings, onGeolocateReady }, ref) => {
         // 長押しでない場合の処理
         if (!isLongPress && pressDuration < LONG_PRESS_DURATION && pressDuration > 0) {
           // 位置が大きく動いていない場合（ドラッグではない）
-          if (touchStartPosition && e.lngLat) {
-            const dx = Math.abs(e.lngLat.lng - touchStartPosition.lng);
-            const dy = Math.abs(e.lngLat.lat - touchStartPosition.lat);
+          if (touchStartPixel && e.point) {
+            // ピクセル単位で移動距離を計算
+            const dx = Math.abs(e.point.x - touchStartPixel.x);
+            const dy = Math.abs(e.point.y - touchStartPixel.y);
+            const distance = Math.sqrt(dx * dx + dy * dy);
 
-            if (dx < 0.001 && dy < 0.001) {
+            console.log('👆 タッチ終了:', distance.toFixed(1), 'px移動');
+
+            if (distance < DRAG_THRESHOLD_PX) {
               // ダブルタップチェック
               if (currentTime - lastTapTime < DOUBLE_TAP_DELAY && lastTapTime > 0) {
                 // ダブルタップ検出
@@ -533,6 +545,7 @@ const Map = forwardRef(({ onOpenSettings, onGeolocateReady }, ref) => {
         // リセット
         touchStartTime = null;
         touchStartPosition = null;
+        touchStartPixel = null;
         isLongPress = false;
         touchCount = 0;
       };

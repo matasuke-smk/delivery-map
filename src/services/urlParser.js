@@ -190,22 +190,32 @@ export const geocodeAddress = async (address, mapboxToken) => {
 
 /**
  * Overpass APIを使って建物名を取得
+ * 段階的に検索範囲を広げて、より正確な結果を取得
  */
 export const getBuildingNameFromOSM = async (lat, lng) => {
   try {
-    // 半径50m以内の建物・POIを検索（範囲を拡大）
-    const radius = 50;
+    // 優先度の高い順に検索（店舗・施設 > 建物 > その他POI）
     const query = `
-      [out:json][timeout:10];
+      [out:json][timeout:15];
       (
-        node["name"](around:${radius},${lat},${lng});
-        way["name"](around:${radius},${lat},${lng});
-        relation["name"](around:${radius},${lat},${lng});
+        // 半径10m以内の店舗・施設（最優先）
+        node["shop"]["name"](around:10,${lat},${lng});
+        node["amenity"]["name"](around:10,${lat},${lng});
+        way["shop"]["name"](around:10,${lat},${lng});
+        way["amenity"]["name"](around:10,${lat},${lng});
+
+        // 半径30m以内の建物
+        node["building"]["name"](around:30,${lat},${lng});
+        way["building"]["name"](around:30,${lat},${lng});
+
+        // 半径50m以内のその他POI
+        node["name"](around:50,${lat},${lng});
+        way["name"](around:50,${lat},${lng});
       );
-      out center 20;
+      out center 30;
     `;
 
-    console.log('🔍 OSM検索開始:', { lat, lng, radius });
+    console.log('🔍 OSM検索開始:', { lat, lng });
 
     const response = await fetch('https://overpass-api.de/api/interpreter', {
       method: 'POST',
@@ -216,74 +226,102 @@ export const getBuildingNameFromOSM = async (lat, lng) => {
     });
 
     if (!response.ok) {
+      console.error('🔴 Overpass API HTTPエラー:', response.status);
       throw new Error(`Overpass API error: ${response.status}`);
     }
 
     const data = await response.json();
-    console.log('🏢 Overpass API結果:', data);
+    console.log('🏢 Overpass API結果:', data.elements?.length || 0, '件');
 
     if (data.elements && data.elements.length > 0) {
-      // 最も近い建物を探す
-      let closestElement = null;
-      let minDistance = Infinity;
+      // 優先度付きで最も適切な建物を探す
+      let bestElement = null;
+      let bestScore = -Infinity;
 
       for (const element of data.elements) {
-        if (element.tags && element.tags.name) {
-          // 距離を計算（nodeの場合は直接、wayの場合は中心点を計算）
-          let elementLat, elementLng;
+        if (!element.tags || !element.tags.name) continue;
 
-          if (element.type === 'node') {
-            elementLat = element.lat;
-            elementLng = element.lon;
-          } else if (element.type === 'way' || element.type === 'relation') {
-            // centerが利用可能な場合
-            if (element.center) {
-              elementLat = element.center.lat;
-              elementLng = element.center.lon;
-            } else if (element.lat && element.lon) {
-              elementLat = element.lat;
-              elementLng = element.lon;
-            } else {
-              // 中心座標がない場合はスキップ
-              continue;
-            }
-          } else {
-            continue;
-          }
+        // 距離を計算
+        let elementLat, elementLng;
+        if (element.type === 'node') {
+          elementLat = element.lat;
+          elementLng = element.lon;
+        } else if (element.center) {
+          elementLat = element.center.lat;
+          elementLng = element.center.lon;
+        } else {
+          continue;
+        }
 
-          // ハバーサイン公式で距離を計算（メートル単位）
-          const R = 6371000; // 地球の半径（メートル）
-          const φ1 = lat * Math.PI / 180;
-          const φ2 = elementLat * Math.PI / 180;
-          const Δφ = (elementLat - lat) * Math.PI / 180;
-          const Δλ = (elementLng - lng) * Math.PI / 180;
+        // ハバーサイン公式で距離を計算（メートル単位）
+        const R = 6371000;
+        const φ1 = lat * Math.PI / 180;
+        const φ2 = elementLat * Math.PI / 180;
+        const Δφ = (elementLat - lat) * Math.PI / 180;
+        const Δλ = (elementLng - lng) * Math.PI / 180;
+        const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+                  Math.cos(φ1) * Math.cos(φ2) *
+                  Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        const distance = R * c;
 
-          const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
-                    Math.cos(φ1) * Math.cos(φ2) *
-                    Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
-          const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-          const distance = R * c;
+        // スコアリング（優先度 × 距離の逆数）
+        let priority = 1;
+        let typeStr = 'poi';
+        if (element.tags.shop) {
+          priority = 100; // 店舗が最優先
+          typeStr = 'shop';
+        } else if (element.tags.amenity) {
+          priority = 90; // 施設が次
+          typeStr = 'amenity';
+        } else if (element.tags.building) {
+          priority = 50; // 建物
+          typeStr = 'building';
+        }
 
-          console.log(`📍 ${element.tags.name}: ${distance.toFixed(1)}m`);
+        // 距離が近いほど高スコア（距離0mなら無限大、100mなら1）
+        const distanceScore = 100 / (distance + 1);
+        const score = priority * distanceScore;
 
-          if (distance < minDistance) {
-            minDistance = distance;
-            closestElement = element;
-          }
+        console.log(`📍 ${element.tags.name} (${typeStr}): ${distance.toFixed(1)}m, score: ${score.toFixed(2)}`);
+
+        if (score > bestScore) {
+          bestScore = score;
+          bestElement = element;
         }
       }
 
-      if (closestElement && closestElement.tags.name) {
+      if (bestElement && bestElement.tags.name) {
+        // 距離を再計算
+        let elementLat, elementLng;
+        if (bestElement.type === 'node') {
+          elementLat = bestElement.lat;
+          elementLng = bestElement.lon;
+        } else if (bestElement.center) {
+          elementLat = bestElement.center.lat;
+          elementLng = bestElement.center.lon;
+        }
+        const R = 6371000;
+        const φ1 = lat * Math.PI / 180;
+        const φ2 = elementLat * Math.PI / 180;
+        const Δφ = (elementLat - lat) * Math.PI / 180;
+        const Δλ = (elementLng - lng) * Math.PI / 180;
+        const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+                  Math.cos(φ1) * Math.cos(φ2) *
+                  Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        const distance = R * c;
+
         const result = {
-          name: closestElement.tags.name,
-          fullName: closestElement.tags.name,
-          type: closestElement.tags.building ? 'building' :
-                closestElement.tags.shop ? 'shop' :
-                closestElement.tags.amenity ? 'amenity' : 'poi',
+          name: bestElement.tags.name,
+          fullName: bestElement.tags.name,
+          type: bestElement.tags.shop ? 'shop' :
+                bestElement.tags.amenity ? 'amenity' :
+                bestElement.tags.building ? 'building' : 'poi',
           source: 'osm',
-          distance: minDistance
+          distance: distance
         };
-        console.log('✅ 最も近い建物:', result);
+        console.log('✅ 最適な建物:', result);
         return result;
       }
     }
