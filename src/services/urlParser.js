@@ -189,9 +189,109 @@ export const geocodeAddress = async (address, mapboxToken) => {
 };
 
 /**
+ * Overpass APIを使って建物名を取得
+ */
+export const getBuildingNameFromOSM = async (lat, lng) => {
+  try {
+    // 半径20m以内の建物・POIを検索
+    const radius = 20;
+    const query = `
+      [out:json][timeout:10];
+      (
+        node["name"](around:${radius},${lat},${lng});
+        way["name"]["building"](around:${radius},${lat},${lng});
+        way["name"]["amenity"](around:${radius},${lat},${lng});
+        way["name"]["shop"](around:${radius},${lat},${lng});
+        relation["name"]["building"](around:${radius},${lat},${lng});
+      );
+      out body 10;
+    `;
+
+    const response = await fetch('https://overpass-api.de/api/interpreter', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded'
+      },
+      body: `data=${encodeURIComponent(query)}`
+    });
+
+    if (!response.ok) {
+      throw new Error(`Overpass API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    console.log('🏢 Overpass API結果:', data);
+
+    if (data.elements && data.elements.length > 0) {
+      // 建物タグ、店舗タグ、施設タグを持つ要素を優先
+      const priorityOrder = ['building', 'shop', 'amenity', 'name'];
+
+      // 最も近い建物を探す
+      let closestElement = null;
+      let minDistance = Infinity;
+
+      for (const element of data.elements) {
+        if (element.tags && element.tags.name) {
+          // 距離を計算（nodeの場合は直接、wayの場合は中心点を計算）
+          let elementLat, elementLng;
+
+          if (element.type === 'node') {
+            elementLat = element.lat;
+            elementLng = element.lon;
+          } else if (element.type === 'way' && element.center) {
+            elementLat = element.center.lat;
+            elementLng = element.center.lon;
+          } else {
+            continue;
+          }
+
+          const distance = Math.sqrt(
+            Math.pow(elementLat - lat, 2) + Math.pow(elementLng - lng, 2)
+          );
+
+          if (distance < minDistance) {
+            minDistance = distance;
+            closestElement = element;
+          }
+        }
+      }
+
+      if (closestElement && closestElement.tags.name) {
+        return {
+          name: closestElement.tags.name,
+          fullName: closestElement.tags.name,
+          type: closestElement.tags.building ? 'building' :
+                closestElement.tags.shop ? 'shop' :
+                closestElement.tags.amenity ? 'amenity' : 'poi',
+          source: 'osm'
+        };
+      }
+    }
+
+    return null;
+  } catch (error) {
+    console.error('🔴 Overpass API error:', error);
+    return null;
+  }
+};
+
+/**
  * 座標から場所名を取得（リバースジオコーディング）
+ * 優先順位: OSM建物名 > Mapbox POI > Mapbox住所
  */
 export const reverseGeocode = async (lat, lng, mapboxToken) => {
+  // まずOSMから建物名を取得
+  try {
+    const osmResult = await getBuildingNameFromOSM(lat, lng);
+    if (osmResult) {
+      console.log('✅ OSMから建物名取得:', osmResult.name);
+      return osmResult;
+    }
+  } catch (error) {
+    console.warn('⚠️ OSM検索失敗、Mapboxにフォールバック');
+  }
+
+  // OSMで見つからない場合はMapboxにフォールバック
   try {
     const response = await fetch(
       `https://api.mapbox.com/geocoding/v5/mapbox.places/${lng},${lat}.json?access_token=${mapboxToken}&language=ja&types=poi,address,place`
@@ -214,7 +314,8 @@ export const reverseGeocode = async (lat, lng, mapboxToken) => {
         return {
           name: poiFeature.text,
           fullName: poiFeature.place_name,
-          type: 'poi'
+          type: 'poi',
+          source: 'mapbox'
         };
       }
 
@@ -222,7 +323,8 @@ export const reverseGeocode = async (lat, lng, mapboxToken) => {
       return {
         name: feature.text,
         fullName: feature.place_name,
-        type: feature.place_type[0]
+        type: feature.place_type[0],
+        source: 'mapbox'
       };
     }
 
