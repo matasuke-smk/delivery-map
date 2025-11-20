@@ -1185,6 +1185,20 @@ const Map = forwardRef(({ onOpenSettings, onGeolocateReady }, ref) => {
         </div>
       )}
 
+      {/* 目的地名称表示（ナビゲーション中のみ） */}
+      {isNavigating && destination && (
+        <div className="absolute top-4 left-1/2 transform -translate-x-1/2 bg-white shadow-lg rounded-full px-6 py-3 z-10 max-w-xs">
+          <div className="flex items-center gap-2">
+            <svg className="w-5 h-5 text-red-500 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
+            </svg>
+            <span className="text-sm font-bold text-gray-900 truncate">
+              {destination.name || `${destination.lat.toFixed(5)}, ${destination.lng.toFixed(5)}`}
+            </span>
+          </div>
+        </div>
+      )}
+
       {/* 設定アイコン（左上） */}
       <button
         onClick={onOpenSettings}
