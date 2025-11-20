@@ -21,7 +21,10 @@ const Map = forwardRef(({ onOpenSettings, onGeolocateReady }, ref) => {
     stores,
     currentLocation,
     currentRoute,
+    routes,
     setCurrentRoute,
+    setRoutes,
+    selectRoute,
     destination,
     setDestination,
     showTraffic,
@@ -39,6 +42,31 @@ const Map = forwardRef(({ onOpenSettings, onGeolocateReady }, ref) => {
   const routeMarker = useRef(null);
   const lastSpokenStep = useRef(-1);
   const currentLocationMarker = useRef(null);
+
+  // ルート選択ハンドラー
+  const handleSelectRoute = (routeIndex) => {
+    if (!routes || !routes[routeIndex]) return;
+
+    console.log(`🔄 ルート${routeIndex + 1}を選択`);
+    selectRoute(routeIndex);
+
+    // 地図上のルート表示を更新
+    if (map.current && map.current.getSource('all-routes')) {
+      const allRoutesFeatures = routes.map((r, index) => ({
+        type: 'Feature',
+        properties: {
+          routeIndex: index,
+          isSelected: index === routeIndex
+        },
+        geometry: r.geometry
+      }));
+
+      map.current.getSource('all-routes').setData({
+        type: 'FeatureCollection',
+        features: allRoutesFeatures
+      });
+    }
+  };
 
   // 外部から呼び出せるメソッドを定義
   useImperativeHandle(ref, () => ({
@@ -696,49 +724,132 @@ const Map = forwardRef(({ onOpenSettings, onGeolocateReady }, ref) => {
     }
   }, [currentLocation, currentLocationIcon]);
 
-  // ルート検索関数
+  // ルート上の信号数をカウント
+  const countTrafficSignals = (route) => {
+    if (!map.current || !map.current.getSource('traffic-signs')) {
+      return 0;
+    }
+
+    const signalSource = map.current.getSource('traffic-signs');
+    const signalData = signalSource._data;
+
+    if (!signalData || !signalData.features) {
+      return 0;
+    }
+
+    const routeCoords = route.geometry.coordinates;
+    let signalCount = 0;
+    const PROXIMITY_THRESHOLD = 0.0001; // 約10m
+
+    signalData.features.forEach(signal => {
+      const signalCoord = signal.geometry.coordinates;
+
+      // ルートの各座標から最も近い距離を計算
+      for (let coord of routeCoords) {
+        const distance = Math.sqrt(
+          Math.pow(coord[0] - signalCoord[0], 2) +
+          Math.pow(coord[1] - signalCoord[1], 2)
+        );
+
+        if (distance < PROXIMITY_THRESHOLD) {
+          signalCount++;
+          break;
+        }
+      }
+    });
+
+    return signalCount;
+  };
+
+  // ルート検索関数（複数ルート対応 + バイクモード）
   const searchRoute = async (origin, destination) => {
     try {
       const storeState = useDeliveryStore.getState();
       const excludeParam = storeState.useTollRoads ? '' : '&exclude=toll';
-      const url = `https://api.mapbox.com/directions/v5/mapbox/driving/${origin.lng},${origin.lat};${destination.lng},${destination.lat}?geometries=geojson&access_token=${mapboxgl.accessToken}&language=ja&alternatives=true&steps=true&overview=full${excludeParam}`;
 
+      // バイクモード（walkingを使用して細い道も通れるように）
+      const url = `https://api.mapbox.com/directions/v5/mapbox/walking/${origin.lng},${origin.lat};${destination.lng},${destination.lat}?geometries=geojson&access_token=${mapboxgl.accessToken}&language=ja&alternatives=true&steps=true&overview=full&max_speed=25${excludeParam}`;
+
+      console.log('🔍 ルート検索開始...');
       const response = await fetch(url);
       const data = await response.json();
 
       if (data.routes && data.routes.length > 0) {
-        const route = data.routes[0];
+        console.log(`📍 ${data.routes.length}件のルート候補を取得`);
+
+        // 各ルートに信号数を追加
+        const routesWithSignals = data.routes.map((route, index) => {
+          const signals = countTrafficSignals(route);
+          console.log(`  ルート${index + 1}: ${(route.distance/1000).toFixed(1)}km, ${Math.round(route.duration/60)}分, 信号${signals}個`);
+          return {
+            ...route,
+            signalCount: signals,
+            routeIndex: index
+          };
+        });
+
+        // 全ルートを保存
+        setRoutes(routesWithSignals);
+
+        // デフォルトで最初のルートを選択
+        const route = routesWithSignals[0];
         setCurrentRoute(route);
 
-        // ルートをマップに描画
-        if (map.current.getSource('route')) {
-          map.current.getSource('route').setData({
-            type: 'Feature',
-            properties: {},
-            geometry: route.geometry
+        // 全ルートを描画（選択されていないルートは灰色）
+        const allRoutesFeatures = routesWithSignals.map((r, index) => ({
+          type: 'Feature',
+          properties: {
+            routeIndex: index,
+            isSelected: index === 0
+          },
+          geometry: r.geometry
+        }));
+
+        if (map.current.getSource('all-routes')) {
+          map.current.getSource('all-routes').setData({
+            type: 'FeatureCollection',
+            features: allRoutesFeatures
           });
         } else {
-          map.current.addSource('route', {
+          // 未選択ルート用のレイヤー
+          map.current.addSource('all-routes', {
             type: 'geojson',
             data: {
-              type: 'Feature',
-              properties: {},
-              geometry: route.geometry
+              type: 'FeatureCollection',
+              features: allRoutesFeatures
             }
           });
 
           map.current.addLayer({
-            id: 'route',
+            id: 'unselected-routes',
             type: 'line',
-            source: 'route',
+            source: 'all-routes',
+            filter: ['==', ['get', 'isSelected'], false],
             layout: {
               'line-join': 'round',
               'line-cap': 'round'
             },
             paint: {
-              'line-color': '#3B82F6',
-              'line-width': 6,
-              'line-opacity': 0.8
+              'line-color': '#9CA3AF',
+              'line-width': 5,
+              'line-opacity': 0.5
+            }
+          });
+
+          // 選択ルート用のレイヤー
+          map.current.addLayer({
+            id: 'selected-route',
+            type: 'line',
+            source: 'all-routes',
+            filter: ['==', ['get', 'isSelected'], true],
+            layout: {
+              'line-join': 'round',
+              'line-cap': 'round'
+            },
+            paint: {
+              'line-color': '#1E40AF',
+              'line-width': 7,
+              'line-opacity': 0.9
             }
           });
         }
@@ -750,13 +861,7 @@ const Map = forwardRef(({ onOpenSettings, onGeolocateReady }, ref) => {
         }, new mapboxgl.LngLatBounds(coordinates[0], coordinates[0]));
 
         map.current.fitBounds(bounds, {
-          padding: { top: 80, bottom: 250, left: 50, right: 50 }
-        });
-
-        console.log('ルート情報:', {
-          距離: `${(route.distance / 1000).toFixed(2)}km`,
-          所要時間: `${Math.round(route.duration / 60)}分`,
-          ステップ数: route.legs[0].steps.length
+          padding: { top: 100, bottom: 300, left: 50, right: 50 }
         });
       }
     } catch (error) {
@@ -1236,82 +1341,16 @@ const Map = forwardRef(({ onOpenSettings, onGeolocateReady }, ref) => {
         </div>
       )}
 
-      {/* 目的地名称表示（目的地が設定されている場合） */}
+      {/* 目的地名称表示（常時表示） */}
       {destination && (
-        <div className="absolute top-4 left-1/2 transform -translate-x-1/2 bg-white shadow-lg rounded-full px-6 py-3 z-10 max-w-xs">
+        <div className="absolute top-4 left-1/2 transform -translate-x-1/2 bg-white shadow-md rounded-lg px-4 py-2 z-10 max-w-xs">
           <div className="flex items-center gap-2">
-            <svg className="w-5 h-5 text-red-500 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24">
+            <svg className="w-4 h-4 text-red-500 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24">
               <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
             </svg>
-            <span className="text-sm font-bold text-gray-900 truncate">
+            <span className="text-xs font-medium text-gray-900 truncate">
               {destination.name || `${destination.lat.toFixed(5)}, ${destination.lng.toFixed(5)}`}
             </span>
-          </div>
-        </div>
-      )}
-
-      {/* 設定アイコン（左上） */}
-      <button
-        onClick={onOpenSettings}
-        className="absolute top-4 left-4 p-3 rounded-full bg-white shadow-lg hover:bg-gray-100 transition-colors z-10"
-      >
-        <svg className="w-6 h-6 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-        </svg>
-      </button>
-
-      {/* ヘルプボタン（左上、設定の下） */}
-      <button
-        onClick={() => setShowHelp(true)}
-        className="absolute top-20 left-4 p-3 rounded-full bg-white shadow-lg hover:bg-gray-100 transition-colors z-10"
-      >
-        <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-        </svg>
-      </button>
-
-      {/* ヘルプモーダル */}
-      {showHelp && (
-        <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg p-6 max-w-sm w-full">
-            <h3 className="text-xl font-bold mb-4 text-gray-800">地図の操作方法</h3>
-            <ul className="space-y-3 text-gray-700">
-              <li className="flex items-start gap-2">
-                <span className="text-blue-500 mt-1">📍</span>
-                <div>
-                  <p className="font-semibold">長押し（0.5秒）</p>
-                  <p className="text-sm text-gray-600">目的地にピンを設置してナビ開始</p>
-                </div>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="text-red-500 mt-1">🗑️</span>
-                <div>
-                  <p className="font-semibold">タップ</p>
-                  <p className="text-sm text-gray-600">ピンと経路をクリア</p>
-                </div>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="text-green-500 mt-1">🔍</span>
-                <div>
-                  <p className="font-semibold">ダブルタップ</p>
-                  <p className="text-sm text-gray-600">拡大・縮小</p>
-                </div>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="text-purple-500 mt-1">✋</span>
-                <div>
-                  <p className="font-semibold">ドラッグ</p>
-                  <p className="text-sm text-gray-600">地図を移動</p>
-                </div>
-              </li>
-            </ul>
-            <button
-              onClick={() => setShowHelp(false)}
-              className="mt-6 w-full py-3 bg-blue-500 text-white rounded-lg font-semibold hover:bg-blue-600 transition-colors"
-            >
-              閉じる
-            </button>
           </div>
         </div>
       )}
@@ -1387,33 +1426,67 @@ const Map = forwardRef(({ onOpenSettings, onGeolocateReady }, ref) => {
         </div>
       )}
 
-      {/* ルート情報（ナビ開始前） */}
-      {!isNavigating && currentRoute && (
-        <div className="absolute bottom-0 left-0 right-0 bg-white shadow-lg border-t border-gray-200 z-20" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
-          <div className="flex items-center gap-2 px-4 py-3">
-            {/* 距離 */}
-            <div className="flex-1 text-center">
-              <div className="text-xs text-gray-500 mb-1">距離</div>
-              <div className="text-lg font-bold text-blue-600">
-                {(currentRoute.distance / 1000).toFixed(1)} km
-              </div>
-            </div>
+      {/* ルート選択UI（ナビ開始前） */}
+      {!isNavigating && routes && routes.length > 0 && (
+        <div className="absolute bottom-0 left-0 right-0 bg-white shadow-2xl z-20" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
+          <div className="px-3 py-2 space-y-2">
+            {routes.map((route, index) => {
+              const isSelected = currentRoute && currentRoute.routeIndex === index;
+              return (
+                <div
+                  key={index}
+                  onClick={() => handleSelectRoute(index)}
+                  className={`flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer transition-all ${
+                    isSelected ? 'bg-blue-100 border-2 border-blue-600' : 'bg-gray-50 border-2 border-transparent hover:bg-gray-100'
+                  }`}
+                >
+                  {/* ルート番号 */}
+                  <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm ${
+                    isSelected ? 'bg-blue-600 text-white' : 'bg-gray-300 text-gray-700'
+                  }`}>
+                    {index + 1}
+                  </div>
 
-            {/* 開始ボタン */}
+                  {/* ルート情報 */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-bold text-gray-900">
+                        {(route.distance / 1000).toFixed(1)}km
+                      </span>
+                      <span className="text-sm text-gray-600">
+                        {Math.round(route.duration / 60)}分
+                      </span>
+                      <span className="text-xs text-gray-500">
+                        信号{route.signalCount || 0}個
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* 推奨バッジ */}
+                  {index === 0 && (
+                    <div className="flex-shrink-0 px-2 py-0.5 bg-green-100 text-green-700 text-xs font-medium rounded">
+                      推奨
+                    </div>
+                  )}
+                  {/* 信号少バッジ */}
+                  {route.signalCount === Math.min(...routes.map(r => r.signalCount || 999)) && route.signalCount < routes[0].signalCount && (
+                    <div className="flex-shrink-0 px-2 py-0.5 bg-yellow-100 text-yellow-700 text-xs font-medium rounded">
+                      信号少
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          {/* 開始ボタン */}
+          <div className="px-3 pb-3">
             <button
               onClick={handleStartNavigation}
-              className="px-6 py-2 bg-black text-white rounded-lg font-bold hover:bg-gray-800 transition-colors"
+              className="w-full py-3 bg-blue-600 text-white rounded-lg font-bold hover:bg-blue-700 transition-colors shadow-md"
             >
-              開始
+              ナビ開始
             </button>
-
-            {/* 所要時間 */}
-            <div className="flex-1 text-center">
-              <div className="text-xs text-gray-500 mb-1">所要時間</div>
-              <div className="text-lg font-bold text-green-600">
-                {Math.round(currentRoute.duration / 60)} 分
-              </div>
-            </div>
           </div>
         </div>
       )}

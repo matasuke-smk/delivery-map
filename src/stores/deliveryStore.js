@@ -25,6 +25,13 @@ const useDeliveryStore = create((set, get) => ({
 
   // ルート設定
   setCurrentRoute: (route) => set({ currentRoute: route }),
+  setRoutes: (routes) => set({ routes: routes }),
+  selectRoute: (routeIndex) => {
+    const { routes } = get();
+    if (routes && routes[routeIndex]) {
+      set({ currentRoute: routes[routeIndex] });
+    }
+  },
 
   // 目的地設定
   setDestination: (location) => set({ destination: location }),
