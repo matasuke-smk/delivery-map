@@ -993,8 +993,8 @@ const Map = forwardRef(({ onOpenSettings, onGeolocateReady }, ref) => {
     const distanceToDestination = calculateDistance(currentLocation, destination);
     console.log('🎯 目的地までの距離:', distanceToDestination.toFixed(1), 'm');
 
-    // 目的地まで50m以内なら到着と判定
-    if (distanceToDestination < 50) {
+    // 目的地まで15m以内なら到着と判定
+    if (distanceToDestination < 15) {
       console.log('🎉 目的地に到着！');
       speak('目的地に到着しました');
       setTimeout(() => {
